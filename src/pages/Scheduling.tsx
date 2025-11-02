@@ -26,7 +26,7 @@ const Scheduling = () => {
     // Load configuration from MySQL database
     const fetchSchedule = async () => {
       try {
-        const response = await fetch('http://192.168.0.100/projectgas/get_schedule.php');
+        const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_schedule.php');
         const data = await response.json();
         setConfig({
           hours: data.hours || 0,
@@ -43,7 +43,7 @@ const Scheduling = () => {
   const saveConfig = async (newConfig: SchedulingConfig) => {
     try {
       // Save to MySQL database
-      await fetch('http://192.168.0.100/projectgas/save_schedule.php', {
+      await fetch('http://192.168.1.10/chrono-state/php-backend/save_schedule.php', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

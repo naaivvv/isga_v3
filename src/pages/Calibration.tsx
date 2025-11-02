@@ -32,7 +32,7 @@ const Calibration = () => {
   useEffect(() => {
     const fetchCalibration = async () => {
       try {
-        const response = await fetch('http://192.168.0.100/projectgas/get_calibration.php');
+        const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_calibration.php');
         const data = await response.json();
         const values = {
           co: data.CO?.value || 0,
@@ -62,12 +62,12 @@ const Calibration = () => {
       await new Promise((resolve) => setTimeout(resolve, 5000));
       
       // Fetch current CO reading from database
-      const response = await fetch('http://192.168.0.100/projectgas/get_sensor_data.php');
+      const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php');
       const sensorData = await response.json();
       const capturedValue = sensorData.co || 0;
 
       // Save calibration to database
-      await fetch('http://192.168.0.100/projectgas/save_calibration.php', {
+      await fetch('http://192.168.1.10/chrono-state/php-backend/save_calibration.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gas_type: 'CO', value: capturedValue }),
@@ -105,7 +105,7 @@ const Calibration = () => {
     }
 
     try {
-      await fetch('http://192.168.0.100/projectgas/save_calibration.php', {
+      await fetch('http://192.168.1.10/chrono-state/php-backend/save_calibration.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gas_type: 'CO2', value }),
@@ -138,7 +138,7 @@ const Calibration = () => {
     }
 
     try {
-      await fetch('http://192.168.0.100/projectgas/save_calibration.php', {
+      await fetch('http://192.168.1.10/chrono-state/php-backend/save_calibration.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gas_type: 'O2', value }),
@@ -170,7 +170,34 @@ const Calibration = () => {
 
         <SystemStatus />
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-3">
+          {/* Calibration Info */}
+          <Card className="md:col-span-3">
+            <CardHeader>
+              <CardTitle>Calibration Guidelines</CardTitle>
+              <CardDescription>Best practices for accurate calibration</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p className="flex items-start gap-2">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span>Perform calibration in a controlled environment</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span>Use certified calibration gases for accuracy</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span>Regular calibration ensures measurement accuracy</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <span className="text-primary mt-0.5">•</span>
+                  <span>Document all calibration values and dates</span>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
           {/* CO Calibration - Automatic Capture */}
           <Card>
             <CardHeader>
@@ -293,34 +320,6 @@ const Calibration = () => {
                 <Settings className="w-4 h-4 mr-2" />
                 Save O₂ Calibration
               </Button>
-            </CardContent>
-          </Card>
-
-          {/* Calibration Info */}
-          <Card className="md:col-span-1">
-            <CardHeader>
-              <CardTitle>Calibration Guidelines</CardTitle>
-              <CardDescription>Best practices for accurate calibration</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Perform calibration in a controlled environment</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Use certified calibration gases for accuracy</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Regular calibration ensures measurement accuracy</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Document all calibration values and dates</span>
-                </p>
-              </div>
             </CardContent>
           </Card>
         </div>

@@ -18,7 +18,7 @@ const Manual = () => {
   useEffect(() => {
     const fetchStates = async () => {
       try {
-        const response = await fetch('http://192.168.0.100/projectgas/get_sensor_data.php');
+        const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php');
         const data = await response.json();
         setFanActive(data.fan === 1);
         setCompressorActive(data.compressor === 1);

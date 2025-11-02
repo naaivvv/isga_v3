@@ -11,22 +11,29 @@ const Index = () => {
   const [o2Level, setO2Level] = useState(0);
 
   useEffect(() => {
-    // Fetch real sensor data from MySQL database
     const fetchSensorData = async () => {
       try {
-        const response = await fetch('http://192.168.0.100/projectgas/get_sensor_data.php');
+        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php");
         const data = await response.json();
-        setCoLevel(data.co || 0);
-        setCo2Level(data.co2 * 100 || 0); // Convert from % to display value
-        setO2Level(data.o2 || 0);
+
+        // ✅ Ensure values are numeric
+        const co = Number(data.co) || 0;
+        const co2ppm = Number(data.co2) || 0;
+        const o2 = Number(data.o2) || 0;
+
+        // ✅ Convert CO2 ppm → percent
+        const co2percent = co2ppm / 10000;
+
+        setCoLevel(co);
+        setCo2Level(co2percent);
+        setO2Level(o2);
       } catch (error) {
-        console.error('Error fetching sensor data:', error);
+        console.error("Error fetching sensor data:", error);
       }
     };
 
-    fetchSensorData(); // Initial fetch
-    const interval = setInterval(fetchSensorData, 2000); // Fetch every 2 seconds
-
+    fetchSensorData();
+    const interval = setInterval(fetchSensorData, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -44,6 +51,7 @@ const Index = () => {
         <SystemStatus />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* CO Card */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
@@ -57,7 +65,9 @@ const Index = () => {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">{coLevel.toFixed(1)}</span>
+                  <span className="text-4xl font-bold text-foreground">
+                    {coLevel.toFixed(1)}
+                  </span>
                   <span className="text-muted-foreground">ppm</span>
                 </div>
                 <Progress value={coLevel} className="h-2" />
@@ -66,6 +76,7 @@ const Index = () => {
             </CardContent>
           </Card>
 
+          {/* CO2 Card */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
@@ -79,15 +90,22 @@ const Index = () => {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">{co2Level.toFixed(0)}</span>
-                  <span className="text-muted-foreground">ppm</span>
+                  {/* ✅ Display CO2 in percent */}
+                  <span className="text-4xl font-bold text-foreground">
+                    {co2Level.toFixed(2)}
+                  </span>
+                  <span className="text-muted-foreground">%</span>
                 </div>
-                <Progress value={(co2Level / 500) * 100} className="h-2" />
-                <p className="text-sm text-muted-foreground">Safe limit: 1000 ppm</p>
+
+                {/* ✅ Progress based on 5% max CO2 (adjust as needed) */}
+                <Progress value={(co2Level / 5) * 100} className="h-2" />
+
+                <p className="text-sm text-muted-foreground">Safe limit: ≤ 0.5%</p>
               </div>
             </CardContent>
           </Card>
 
+          {/* O2 Card */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
@@ -101,11 +119,13 @@ const Index = () => {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">{o2Level.toFixed(1)}</span>
+                  <span className="text-4xl font-bold text-foreground">
+                    {o2Level.toFixed(1)}
+                  </span>
                   <span className="text-muted-foreground">%</span>
                 </div>
                 <Progress value={(o2Level / 21) * 100} className="h-2" />
-                <p className="text-sm text-muted-foreground">Normal: 19.5-23.5%</p>
+                <p className="text-sm text-muted-foreground">Normal: 19.5–23.5%</p>
               </div>
             </CardContent>
           </Card>

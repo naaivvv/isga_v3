@@ -28,7 +28,7 @@ const SystemStatus = () => {
     // Load scheduling status from database
     const updateSchedulingStatus = async () => {
       try {
-        const response = await fetch('http://192.168.0.100/projectgas/get_schedule.php');
+        const response = await fetch('http://192.168.1.10/projectgas/get_schedule.php');
         const config = await response.json();
         setSchedulingActive(config.active === 1);
       } catch (error) {

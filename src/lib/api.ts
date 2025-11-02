@@ -1,6 +1,6 @@
 // API configuration for connecting to MySQL database via PHP backend
 // Update this IP address to match your WAMP server IP
-const API_BASE_URL = 'http://192.168.0.100/projectgas';
+const API_BASE_URL = 'http://192.168.1.10/projectgas';
 const ESP32_IP = 'http://192.168.0.111';
 
 export interface SensorData {
