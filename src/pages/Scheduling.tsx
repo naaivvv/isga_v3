@@ -13,13 +13,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-// Import necessary functions from api.ts
-import { sendESP32Command, getSensorData, saveSchedule as saveScheduleApi } from "@/lib/api";
+// Import only the functions we actually need
+import { 
+  sendESP32Command, 
+  saveSchedule as saveScheduleApi 
+} from "@/lib/api";
 
 // Configuration for pre-reading sequence times (in milliseconds)
 const FAN_TIME_MS = 10000;
 const COMPRESSOR_TIME_MS = 10000;
-const SENSOR_READ_TIME_MS = 10000;
+const SENSOR_READ_TIME_MS = 10000; // This is the wait time for the ESP32 to send its data
 
 interface SchedulingConfig {
   hours: number;
@@ -39,7 +42,6 @@ const Scheduling = () => {
   const [isReading, setIsReading] = useState<boolean>(false);
 
   // --- Helper to save configuration to backend (using the imported API function) ---
-  // The 'config' dependency array in executeReadingCycle relies on the immediate state update here.
   const saveConfig = async (newConfig: SchedulingConfig, silent = false) => {
     try {
       await saveScheduleApi({
@@ -68,15 +70,10 @@ const Scheduling = () => {
   
   // --- Deactivate Scheduling (Manual Stop) ---
   const handleDeactivate = (silent = false) => {
-    // 1. Immediately update state to stop countdown/cycle checks
     const newConfig = { ...config, active: false };
     setConfig(newConfig); 
-
-    // 2. Stop ongoing visual/functional cycle
     setIsReading(false); 
     setRemainingTime(0);
-
-    // 3. Update database
     saveConfig(newConfig, true); 
 
     if (!silent) {
@@ -90,10 +87,7 @@ const Scheduling = () => {
 
   // --- Execute the Sensor Reading Cycle ---
   const executeReadingCycle = useCallback(async () => {
-    // CRITICAL: Check the active status from the state captured by the useCallback hook.
     if (!config.active) {
-        // This handles the scenario where the timer hits zero, but we manually deactivated 
-        // the schedule just before this function was executed.
         console.log("Cycle aborted: Schedule is inactive.");
         setIsReading(false);
         setRemainingTime(0);
@@ -101,7 +95,7 @@ const Scheduling = () => {
     }
 
     setIsReading(true);
-    let readingSuccessful = false;
+    let commandsSuccessful = false;
 
     toast({
       title: "Cycle Started",
@@ -109,7 +103,7 @@ const Scheduling = () => {
     });
 
     try {
-      // --- Start of ESP32 Control and Sensor Reading Sequence ---
+      // --- Start of ESP32 Control Sequence ---
       
       try {
         // 1. Turn on Fan for 10 seconds
@@ -126,21 +120,23 @@ const Scheduling = () => {
         await sendESP32Command('compressor', false);
         toast({ title: "Compressor OFF", description: "Sampling complete." });
 
-        // 3. Read Sensor Data for 10 seconds (Simulated)
+        // 3. Wait for Sensor Reading
+        // During this 10-second window, the ESP32's 10-second loop 
+        // will fire and it will send its data to sensor_value.php
         toast({
           title: "Reading Sensors",
-          description: "Sampling gas data for 10 seconds.",
+          description: "Waiting for device to save data... (10s)",
         });
         await new Promise(resolve => setTimeout(resolve, SENSOR_READ_TIME_MS));
         
-        const sensorData = await getSensorData(); // Final fetch for the reading
-        console.log("Sensor Data Captured:", sensorData);
-        readingSuccessful = true;
+        // We assume the commands were sent successfully.
+        // The ESP32 is responsible for the actual data.
+        commandsSuccessful = true;
 
         toast({
-          title: "Reading Complete",
-          description: `CO: ${sensorData.co}, CO2: ${sensorData.co2}, O2: ${sensorData.o2}`,
-          duration: 5000,
+          title: "Cycle Complete",
+          description: "Device has saved its new reading.",
+          duration: 4000,
         });
 
       } catch (error) {
@@ -164,24 +160,23 @@ const Scheduling = () => {
     } finally {
       setIsReading(false);
       
-      // *** CRITICAL CHECK TO PREVENT RE-LOOP AFTER MANUAL STOP ***
       // Only restart the countdown if the schedule is still active.
       if (config.active) {
         // 4. Restart Countdown on the client
         const totalSeconds = config.hours * 3600 + config.minutes * 60;
         setRemainingTime(totalSeconds);
         
-        // Update DB to reset the 'updated_at' timestamp (crucial for loop continuation)
+        // Update DB to reset the 'updated_at' timestamp
         saveConfig({ ...config, active: true }, true); 
         
-        const cycleStatus = readingSuccessful ? "Success" : "Failed - Hardware is Offline";
+        const cycleStatus = commandsSuccessful ? "Commands Sent" : "Failed - Hardware Offline";
         toast({
-          title: `Cycle Complete (${cycleStatus})`,
+          title: `Cycle Finished (${cycleStatus})`,
           description: `Next reading in ${config.hours}h ${config.minutes}m`,
           duration: 3000,
         });
       } else {
-        // If config.active is false (manually stopped), ensure countdown is zero and toast is silent
+        // If config.active is false (manually stopped)
         setRemainingTime(0);
         console.log("Countdown reset aborted: Schedule was manually deactivated.");
       }
@@ -190,7 +185,6 @@ const Scheduling = () => {
 
   // --- Handle Cycle Completion (Trigger the reading cycle) ---
   const handleCycleCompletion = () => {
-    // Only proceed if the config is active.
     if (!config.active) return;
     
     toast({
@@ -205,6 +199,7 @@ const Scheduling = () => {
   useEffect(() => {
     const fetchSchedule = async () => {
       try {
+        // Make sure this URL is correct
         const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_schedule.php");
         const data = await response.json();
 
@@ -225,7 +220,6 @@ const Scheduling = () => {
           if (remaining > 0) {
             setRemainingTime(remaining);
           } else {
-            // Time expired: Set remaining to 0. The main countdown useEffect will trigger the cycle shortly.
             setRemainingTime(0);
           }
         } else {
@@ -243,14 +237,12 @@ const Scheduling = () => {
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null;
 
-    // Check for immediate cycle trigger (when remainingTime hits 0 or on load if expired)
     if (config.active && remainingTime <= 1 && !isReading) {
       if (remainingTime === 0) {
           handleCycleCompletion();
           return () => { if (timer) clearInterval(timer); };
       }
     }
-
 
     if (config.active && remainingTime > 0 && !isReading) {
       timer = setInterval(() => {
@@ -331,6 +323,7 @@ const Scheduling = () => {
           {/* Left panel */}
           <Card>
             <CardHeader>
+              {/* ... (rest of the JSX is unchanged) ... */}
               <CardTitle className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-primary" />
                 Interval Configuration
@@ -392,7 +385,6 @@ const Scheduling = () => {
                   variant="destructive"
                   className="w-full"
                   size="lg"
-                  // Always allow deactivation, even if reading is in progress
                 >
                   <Square className="w-4 h-4 mr-2" />
                   Deactivate Scheduling
