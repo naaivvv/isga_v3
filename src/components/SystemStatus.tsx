@@ -1,49 +1,68 @@
-import { AlertCircle, CheckCircle, Clock, Calendar } from "lucide-react";
+import { AlertCircle, CheckCircle, Clock, Calendar, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
 const SystemStatus = () => {
   const [uptime, setUptime] = useState("00:00:00");
   const [schedulingActive, setSchedulingActive] = useState(false);
+  const [connectionActive, setConnectionActive] = useState(false);
 
+  // --- Simulated uptime timer ---
   useEffect(() => {
-    // Update uptime
     let seconds = 0;
     const interval = setInterval(() => {
       seconds++;
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      const secs = seconds % 60;
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = seconds % 60;
       setUptime(
-        `${hours.toString().padStart(2, "0")}:${minutes
+        `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s
           .toString()
-          .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
+          .padStart(2, "0")}`
       );
     }, 1000);
 
     return () => clearInterval(interval);
   }, []);
 
+  // --- Check ESP32 connectivity ---
   useEffect(() => {
-    // Load scheduling status from database
+    const checkConnection = async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        const response = await fetch("http://192.168.0.111", {
+          method: "HEAD",
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        setConnectionActive(response.ok);
+      } catch {
+        setConnectionActive(false);
+      }
+    };
+
+    checkConnection();
+    const interval = setInterval(checkConnection, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // --- Fetch scheduling status from backend ---
+  useEffect(() => {
     const updateSchedulingStatus = async () => {
       try {
-        const response = await fetch('http://192.168.1.10/projectgas/get_schedule.php');
+        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_schedule.php");
         const config = await response.json();
-        setSchedulingActive(config.active === 1);
+        const isActive = config.active == 1; // <-- loose equality
+        setSchedulingActive(isActive);
       } catch (error) {
-        console.error('Error fetching scheduling status:', error);
+        console.error("Error fetching scheduling status:", error);
       }
     };
 
     updateSchedulingStatus();
-
-    // Listen for scheduling updates
-    window.addEventListener("schedulingUpdated", updateSchedulingStatus);
-
-    return () => {
-      window.removeEventListener("schedulingUpdated", updateSchedulingStatus);
-    };
+    const interval = setInterval(updateSchedulingStatus, 5000); // <-- poll every 5s
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -52,15 +71,35 @@ const SystemStatus = () => {
         <AlertCircle className="w-5 h-5 text-primary" />
         System Status
       </h2>
+
       <div className="flex flex-wrap gap-3">
-        <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 px-3 py-1.5">
-          <CheckCircle className="w-4 h-4 mr-2" />
-          Connection: Active
+        {/* Connection Status */}
+        <Badge
+          variant="outline"
+          className={`px-3 py-1.5 ${
+            connectionActive
+              ? "bg-green-50 text-green-700 border-green-200"
+              : "bg-red-50 text-red-700 border-red-200"
+          }`}
+        >
+          {connectionActive ? (
+            <CheckCircle className="w-4 h-4 mr-2" />
+          ) : (
+            <XCircle className="w-4 h-4 mr-2" />
+          )}
+          Connection: {connectionActive ? "Active" : "Inactive"}
         </Badge>
-        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 px-3 py-1.5">
+
+        {/* Uptime */}
+        <Badge
+          variant="outline"
+          className="bg-blue-50 text-blue-700 border-blue-200 px-3 py-1.5"
+        >
           <Clock className="w-4 h-4 mr-2" />
           Uptime: {uptime}
         </Badge>
+
+        {/* Scheduling */}
         <Badge
           variant="outline"
           className={`px-3 py-1.5 ${

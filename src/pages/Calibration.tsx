@@ -60,11 +60,13 @@ const Calibration = () => {
     try {
       // Capture sensor data for 5 seconds
       await new Promise((resolve) => setTimeout(resolve, 5000));
-      
+
       // Fetch current CO reading from database
       const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php');
       const sensorData = await response.json();
-      const capturedValue = sensorData.co || 0;
+
+      // Ensure numeric conversion
+      const capturedValue = parseFloat(sensorData.co) || 0;
 
       // Save calibration to database
       await fetch('http://192.168.1.10/chrono-state/php-backend/save_calibration.php', {
@@ -73,8 +75,10 @@ const Calibration = () => {
         body: JSON.stringify({ gas_type: 'CO', value: capturedValue }),
       });
 
-      const newValues = { ...calibrationValues, co: parseFloat(capturedValue.toFixed(2)) };
+      // Safely handle floating number formatting
+      const newValues = { ...calibrationValues, co: capturedValue };
       setCalibrationValues(newValues);
+
       toast({
         title: "CO Calibration Complete",
         description: `Calibrated value: ${capturedValue.toFixed(2)} ppm`,
@@ -92,6 +96,7 @@ const Calibration = () => {
       setCaptureProgress(0);
     }
   };
+
 
   const handleSaveCO2 = async () => {
     const value = parseFloat(co2Input);
