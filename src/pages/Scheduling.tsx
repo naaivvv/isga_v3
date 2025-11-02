@@ -23,18 +23,48 @@ const Scheduling = () => {
   });
 
   useEffect(() => {
-    // Load saved configuration
-    const saved = localStorage.getItem("schedulingConfig");
-    if (saved) {
-      setConfig(JSON.parse(saved));
-    }
+    // Load configuration from MySQL database
+    const fetchSchedule = async () => {
+      try {
+        const response = await fetch('http://192.168.0.100/projectgas/get_schedule.php');
+        const data = await response.json();
+        setConfig({
+          hours: data.hours || 0,
+          minutes: data.minutes || 30,
+          active: data.active === 1,
+        });
+      } catch (error) {
+        console.error('Error fetching schedule:', error);
+      }
+    };
+    fetchSchedule();
   }, []);
 
-  const saveConfig = (newConfig: SchedulingConfig) => {
-    localStorage.setItem("schedulingConfig", JSON.stringify(newConfig));
-    setConfig(newConfig);
-    // Dispatch custom event to notify other components
-    window.dispatchEvent(new Event("schedulingUpdated"));
+  const saveConfig = async (newConfig: SchedulingConfig) => {
+    try {
+      // Save to MySQL database
+      await fetch('http://192.168.0.100/projectgas/save_schedule.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          hours: newConfig.hours,
+          minutes: newConfig.minutes,
+          active: newConfig.active ? 1 : 0,
+        }),
+      });
+      setConfig(newConfig);
+      // Dispatch custom event to notify other components
+      window.dispatchEvent(new Event("schedulingUpdated"));
+    } catch (error) {
+      console.error('Error saving schedule:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save schedule to database",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleActivate = () => {

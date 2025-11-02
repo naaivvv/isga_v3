@@ -25,22 +25,24 @@ const SystemStatus = () => {
   }, []);
 
   useEffect(() => {
-    // Check scheduling status
-    const checkScheduling = () => {
-      const config = localStorage.getItem("schedulingConfig");
-      if (config) {
-        const { active } = JSON.parse(config);
-        setSchedulingActive(active);
+    // Load scheduling status from database
+    const updateSchedulingStatus = async () => {
+      try {
+        const response = await fetch('http://192.168.0.100/projectgas/get_schedule.php');
+        const config = await response.json();
+        setSchedulingActive(config.active === 1);
+      } catch (error) {
+        console.error('Error fetching scheduling status:', error);
       }
     };
 
-    checkScheduling();
-    window.addEventListener("storage", checkScheduling);
-    window.addEventListener("schedulingUpdated", checkScheduling);
+    updateSchedulingStatus();
+
+    // Listen for scheduling updates
+    window.addEventListener("schedulingUpdated", updateSchedulingStatus);
 
     return () => {
-      window.removeEventListener("storage", checkScheduling);
-      window.removeEventListener("schedulingUpdated", checkScheduling);
+      window.removeEventListener("schedulingUpdated", updateSchedulingStatus);
     };
   }, []);
 

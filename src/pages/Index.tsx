@@ -11,12 +11,21 @@ const Index = () => {
   const [o2Level, setO2Level] = useState(0);
 
   useEffect(() => {
-    // Simulate sensor readings
-    const interval = setInterval(() => {
-      setCoLevel(Math.random() * 100);
-      setCo2Level(Math.random() * 500);
-      setO2Level(20 + Math.random() * 1);
-    }, 2000);
+    // Fetch real sensor data from MySQL database
+    const fetchSensorData = async () => {
+      try {
+        const response = await fetch('http://192.168.0.100/projectgas/get_sensor_data.php');
+        const data = await response.json();
+        setCoLevel(data.co || 0);
+        setCo2Level(data.co2 * 100 || 0); // Convert from % to display value
+        setO2Level(data.o2 || 0);
+      } catch (error) {
+        console.error('Error fetching sensor data:', error);
+      }
+    };
+
+    fetchSensorData(); // Initial fetch
+    const interval = setInterval(fetchSensorData, 2000); // Fetch every 2 seconds
 
     return () => clearInterval(interval);
   }, []);

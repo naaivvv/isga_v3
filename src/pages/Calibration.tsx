@@ -28,44 +28,72 @@ const Calibration = () => {
   const [isCapturing, setIsCapturing] = useState(false);
   const [captureProgress, setCaptureProgress] = useState(0);
 
+  // Load calibration values from database on mount
   useEffect(() => {
-    // Load saved calibration values
-    const saved = localStorage.getItem("calibrationValues");
-    if (saved) {
-      const values = JSON.parse(saved);
-      setCalibrationValues(values);
-      setCo2Input(values.co2.toString());
-      setO2Input(values.o2.toString());
-    }
+    const fetchCalibration = async () => {
+      try {
+        const response = await fetch('http://192.168.0.100/projectgas/get_calibration.php');
+        const data = await response.json();
+        const values = {
+          co: data.CO?.value || 0,
+          co2: data.CO2?.value || 0,
+          o2: data.O2?.value || 20.9,
+        };
+        setCalibrationValues(values);
+        setCo2Input(values.co2.toString());
+        setO2Input(values.o2.toString());
+      } catch (error) {
+        console.error('Error fetching calibration:', error);
+      }
+    };
+    fetchCalibration();
   }, []);
 
-  const handleCaptureCO = () => {
+  const handleCaptureCO = async () => {
     setIsCapturing(true);
     setCaptureProgress(0);
 
-    // Simulate capturing data for 5 seconds
-    let progress = 0;
     const interval = setInterval(() => {
-      progress += 20;
-      setCaptureProgress(progress);
-
-      if (progress >= 100) {
-        clearInterval(interval);
-        // Simulate getting a reading from hardware
-        const capturedValue = Math.random() * 50 + 10; // Random value between 10-60 ppm
-        const newValues = { ...calibrationValues, co: parseFloat(capturedValue.toFixed(2)) };
-        setCalibrationValues(newValues);
-        localStorage.setItem("calibrationValues", JSON.stringify(newValues));
-        setIsCapturing(false);
-        toast({
-          title: "CO Calibration Complete",
-          description: `Calibrated CO value: ${capturedValue.toFixed(2)} ppm`,
-        });
-      }
+      setCaptureProgress((prev) => Math.min(prev + 20, 100));
     }, 1000);
+
+    try {
+      // Capture sensor data for 5 seconds
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      
+      // Fetch current CO reading from database
+      const response = await fetch('http://192.168.0.100/projectgas/get_sensor_data.php');
+      const sensorData = await response.json();
+      const capturedValue = sensorData.co || 0;
+
+      // Save calibration to database
+      await fetch('http://192.168.0.100/projectgas/save_calibration.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gas_type: 'CO', value: capturedValue }),
+      });
+
+      const newValues = { ...calibrationValues, co: parseFloat(capturedValue.toFixed(2)) };
+      setCalibrationValues(newValues);
+      toast({
+        title: "CO Calibration Complete",
+        description: `Calibrated value: ${capturedValue.toFixed(2)} ppm`,
+      });
+    } catch (error) {
+      console.error('Error capturing CO data:', error);
+      toast({
+        title: "Calibration Failed",
+        description: "Failed to capture CO sensor data",
+        variant: "destructive",
+      });
+    } finally {
+      clearInterval(interval);
+      setIsCapturing(false);
+      setCaptureProgress(0);
+    }
   };
 
-  const handleSaveCO2 = () => {
+  const handleSaveCO2 = async () => {
     const value = parseFloat(co2Input);
     if (isNaN(value) || value < 0) {
       toast({
@@ -76,16 +104,29 @@ const Calibration = () => {
       return;
     }
 
-    const newValues = { ...calibrationValues, co2: value };
-    setCalibrationValues(newValues);
-    localStorage.setItem("calibrationValues", JSON.stringify(newValues));
-    toast({
-      title: "CO₂ Calibration Saved",
-      description: `Calibrated CO₂ value: ${value} ppm`,
-    });
+    try {
+      await fetch('http://192.168.0.100/projectgas/save_calibration.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gas_type: 'CO2', value }),
+      });
+
+      const newValues = { ...calibrationValues, co2: value };
+      setCalibrationValues(newValues);
+      toast({
+        title: "CO₂ Calibration Saved",
+        description: `Calibrated CO₂ value: ${value} ppm`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save CO₂ calibration",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleSaveO2 = () => {
+  const handleSaveO2 = async () => {
     const value = parseFloat(o2Input);
     if (isNaN(value) || value < 0 || value > 100) {
       toast({
@@ -96,13 +137,26 @@ const Calibration = () => {
       return;
     }
 
-    const newValues = { ...calibrationValues, o2: value };
-    setCalibrationValues(newValues);
-    localStorage.setItem("calibrationValues", JSON.stringify(newValues));
-    toast({
-      title: "O₂ Calibration Saved",
-      description: `Calibrated O₂ value: ${value}%`,
-    });
+    try {
+      await fetch('http://192.168.0.100/projectgas/save_calibration.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gas_type: 'O2', value }),
+      });
+
+      const newValues = { ...calibrationValues, o2: value };
+      setCalibrationValues(newValues);
+      toast({
+        title: "O₂ Calibration Saved",
+        description: `Calibrated O₂ value: ${value}%`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save O₂ calibration",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
