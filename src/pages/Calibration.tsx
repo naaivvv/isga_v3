@@ -533,7 +533,9 @@ const Calibration = () => {
                     <div className="p-4 bg-background rounded-lg">
                       <p className="text-sm text-muted-foreground mb-1">T-Test Value</p>
                       <p className="text-2xl font-bold">
-                        {coCalibrationData.t_value.toFixed(4)}
+                        {typeof coCalibrationData.t_value === 'number'
+                          ? coCalibrationData.t_value.toFixed(4)
+                          : 'N/A'}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         Critical range: -2.045 to +2.045
@@ -560,15 +562,21 @@ const Calibration = () => {
                     <div className="p-4 bg-background rounded-lg">
                       <p className="text-sm text-muted-foreground mb-1">Correction Slope (m)</p>
                       <p className="text-xl font-bold">
-                        {coCalibrationData.correction_slope.toFixed(6)}
-                      </p>
+                      {typeof coCalibrationData.t_value === 'number'
+                        ? coCalibrationData.correction_slope.toFixed(6)
+                        : 'N/A'}
+                    </p>
+
                     </div>
 
                     <div className="p-4 bg-background rounded-lg">
                       <p className="text-sm text-muted-foreground mb-1">Correction Intercept (b)</p>
                       <p className="text-xl font-bold">
-                        {coCalibrationData.correction_intercept.toFixed(4)}
+                        {typeof coCalibrationData.t_value === 'number'
+                          ? coCalibrationData.correction_intercept.toFixed(4)
+                          : 'N/A'}
                       </p>
+
                     </div>
                   </div>
 

@@ -28,21 +28,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     
     // Read data from $_POST
     $node_name = isset($_POST['node_name']) ? $_POST['node_name'] : "node_unknown";
-    $co_ppm = isset($_POST['co']) ? floatval($_POST['co']) : 0; // CO is received in PPM
-    $co2 = isset($_POST['co2']) ? floatval($_POST['co2']) : 0;
+    $co_ppm = isset($_POST['co']) ? floatval($_POST['co']) : 0;     // CO is received in PPM
+    $co2_ppm = isset($_POST['co2']) ? floatval($_POST['co2']) : 0;   // CO2 is received in PPM
     $o2 = isset($_POST['o2']) ? floatval($_POST['o2']) : 0;
     $fan = isset($_POST['fan']) ? intval($_POST['fan']) : 0;
     $compressor = isset($_POST['compressor']) ? intval($_POST['compressor']) : 0;
 
     // --- Data Processing and Conversion ---
     
-    // Convert CO from PPM (parts per million) to Percentage (%)
+    // Convert CO2 from PPM (parts per million) to Percentage (%)
     // Formula: % = PPM / 10000
-    // Example: 1000 ppm is 0.1%
-    $co_percent = $co_ppm / 10000;
+    // Example: 400 ppm is 0.04%
+    $co2_percent = $co2_ppm / 10000;
     
     // Prepare and execute the INSERT statement
-    // The converted CO percentage value ($co_percent) is used here.
+    // CO is saved as PPM ($co_ppm)
+    // CO2 is saved as Percentage ($co2_percent)
     $sql = "INSERT INTO sensor (node_name, co, co2, o2, fan, compressor) VALUES (?, ?, ?, ?, ?, ?)";
     $stmt = $conn->prepare($sql);
     
@@ -53,8 +54,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         exit();
     }
     
-    // Bind the CO percentage value ($co_percent)
-    $stmt->bind_param("sddiii", $node_name, $co_percent, $co2, $o2, $fan, $compressor);
+    // Bind parameters:
+    // $node_name (string)
+    // $co_ppm (double) - Storing CO as PPM
+    // $co2_percent (double) - Storing CO2 as percentage
+    // $o2 (double)
+    // $fan (integer)
+    // $compressor (integer)
+    $stmt->bind_param("sdddii", $node_name, $co_ppm, $co2_percent, $o2, $fan, $compressor);
 
     if ($stmt->execute()) {
         echo json_encode(["success" => true, "message" => "Sensor data saved"]);
