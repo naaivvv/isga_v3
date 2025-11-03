@@ -5,28 +5,80 @@ import SystemStatus from "@/components/SystemStatus";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 
+interface CalibrationData {
+  correction_slope: number;
+  correction_intercept: number;
+  passed: number;
+}
+
 const Index = () => {
   const [coLevel, setCoLevel] = useState(0);
   const [co2Level, setCo2Level] = useState(0);
   const [o2Level, setO2Level] = useState(0);
+  
+  // Calibration correction factors
+  const [coCalibration, setCoCalibration] = useState<CalibrationData>({ correction_slope: 1, correction_intercept: 0, passed: 0 });
+  const [co2Calibration, setCo2Calibration] = useState<CalibrationData>({ correction_slope: 1, correction_intercept: 0, passed: 0 });
+  const [o2Calibration, setO2Calibration] = useState<CalibrationData>({ correction_slope: 1, correction_intercept: 0, passed: 0 });
 
+  // Load calibration data on mount
+  useEffect(() => {
+    const fetchCalibration = async () => {
+      try {
+        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_unified_calibration.php");
+        const data = await response.json();
+        
+        if (data.CO) {
+          setCoCalibration({
+            correction_slope: data.CO.correction_slope || 1,
+            correction_intercept: data.CO.correction_intercept || 0,
+            passed: data.CO.passed || 0
+          });
+        }
+        if (data.CO2) {
+          setCo2Calibration({
+            correction_slope: data.CO2.correction_slope || 1,
+            correction_intercept: data.CO2.correction_intercept || 0,
+            passed: data.CO2.passed || 0
+          });
+        }
+        if (data.O2) {
+          setO2Calibration({
+            correction_slope: data.O2.correction_slope || 1,
+            correction_intercept: data.O2.correction_intercept || 0,
+            passed: data.O2.passed || 0
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching calibration data:", error);
+      }
+    };
+    fetchCalibration();
+  }, []);
+
+  // Fetch sensor data and apply calibration
   useEffect(() => {
     const fetchSensorData = async () => {
       try {
         const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php");
         const data = await response.json();
 
-        // ✅ Ensure values are numeric
-        const co = Number(data.co) || 0;
-        const co2ppm = Number(data.co2) || 0;
-        const o2 = Number(data.o2) || 0;
+        // Get raw sensor values
+        const coRaw = Number(data.co) || 0;
+        const co2ppmRaw = Number(data.co2) || 0;
+        const o2Raw = Number(data.o2) || 0;
 
-        // ✅ Convert CO2 ppm → percent
-        const co2percent = co2ppm / 10000;
+        // Convert CO2 ppm → percent
+        const co2percentRaw = co2ppmRaw / 10000;
 
-        setCoLevel(co);
-        setCo2Level(co2percent);
-        setO2Level(o2);
+        // Apply linear regression calibration: calibrated = raw * slope + intercept
+        const coCalibrated = coRaw * coCalibration.correction_slope + coCalibration.correction_intercept;
+        const co2Calibrated = co2percentRaw * co2Calibration.correction_slope + co2Calibration.correction_intercept;
+        const o2Calibrated = o2Raw * o2Calibration.correction_slope + o2Calibration.correction_intercept;
+
+        setCoLevel(coCalibrated);
+        setCo2Level(co2Calibrated);
+        setO2Level(o2Calibrated);
       } catch (error) {
         console.error("Error fetching sensor data:", error);
       }
@@ -35,7 +87,7 @@ const Index = () => {
     fetchSensorData();
     const interval = setInterval(fetchSensorData, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [coCalibration, co2Calibration, o2Calibration]);
 
   return (
     <div className="min-h-screen bg-background">

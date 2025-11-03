@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Activity, Droplet, Wind, AlertCircle, Settings, CheckCircle, XCircle } from "lucide-react";
+import { Activity, Droplet, Wind, AlertCircle, CheckCircle, XCircle } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import SystemStatus from "@/components/SystemStatus";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,67 +11,100 @@ import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 
-interface CalibrationValues {
-  co2: number;
-  o2: number;
-}
-
-interface CoCalibrationData {
-  gas_500: number[];
-  gas_100: number[];
-  gas_50: number[];
+interface GasCalibrationData {
+  reference_value: number;
+  trial_1_readings: number[];
+  trial_2_readings: number[];
+  trial_3_readings: number[];
+  trial_1_avg: number;
+  trial_2_avg: number;
+  trial_3_avg: number;
   t_value: number | null;
   passed: boolean | null;
   correction_slope: number;
   correction_intercept: number;
 }
 
-type CalibrationStep = 'idle' | '500ppm' | '100ppm' | '50ppm' | 'computing' | 'complete';
+type GasType = 'CO' | 'CO2' | 'O2';
+type CalibrationStep = 'idle' | 'trial1' | 'trial2' | 'trial3' | 'computing' | 'complete';
 
 const Calibration = () => {
   const { toast } = useToast();
-  const [calibrationValues, setCalibrationValues] = useState<CalibrationValues>({
-    co2: 0,
-    o2: 20.9,
-  });
-  const [co2Input, setCo2Input] = useState("0");
-  const [o2Input, setO2Input] = useState("20.9");
   
-  // CO Calibration state
-  const [coCalibrationStep, setCoCalibrationStep] = useState<CalibrationStep>('idle');
-  const [coCalibrationData, setCoCalibrationData] = useState<CoCalibrationData>({
-    gas_500: [],
-    gas_100: [],
-    gas_50: [],
+  // Calibration state for each gas
+  const [coData, setCoData] = useState<GasCalibrationData>({
+    reference_value: 0,
+    trial_1_readings: [],
+    trial_2_readings: [],
+    trial_3_readings: [],
+    trial_1_avg: 0,
+    trial_2_avg: 0,
+    trial_3_avg: 0,
     t_value: null,
     passed: null,
     correction_slope: 1,
     correction_intercept: 0,
   });
+
+  const [co2Data, setCo2Data] = useState<GasCalibrationData>({
+    reference_value: 0,
+    trial_1_readings: [],
+    trial_2_readings: [],
+    trial_3_readings: [],
+    trial_1_avg: 0,
+    trial_2_avg: 0,
+    trial_3_avg: 0,
+    t_value: null,
+    passed: null,
+    correction_slope: 1,
+    correction_intercept: 0,
+  });
+
+  const [o2Data, setO2Data] = useState<GasCalibrationData>({
+    reference_value: 20.9,
+    trial_1_readings: [],
+    trial_2_readings: [],
+    trial_3_readings: [],
+    trial_1_avg: 0,
+    trial_2_avg: 0,
+    trial_3_avg: 0,
+    t_value: null,
+    passed: null,
+    correction_slope: 1,
+    correction_intercept: 0,
+  });
+
+  // Reference value inputs
+  const [coReference, setCoReference] = useState("0");
+  const [co2Reference, setCo2Reference] = useState("0");
+  const [o2Reference, setO2Reference] = useState("20.9");
+
+  // Current gas being calibrated
+  const [activeGas, setActiveGas] = useState<GasType | null>(null);
+  const [calibrationStep, setCalibrationStep] = useState<CalibrationStep>('idle');
   const [currentReading, setCurrentReading] = useState<number>(0);
   const [captureProgress, setCaptureProgress] = useState(0);
   const [readingsCollected, setReadingsCollected] = useState(0);
 
-  // Load calibration values from database on mount
+  // Load calibration data on mount
   useEffect(() => {
     const fetchCalibration = async () => {
       try {
-        const [calibResponse] = await Promise.all([
-          fetch('http://192.168.1.10/chrono-state/php-backend/get_calibration.php'),
-        ]);
+        const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_unified_calibration.php');
+        const data = await response.json();
         
-        const calibData = await calibResponse.json();
-        
-        const values = {
-          co2: calibData.CO2?.value || 0,
-          o2: calibData.O2?.value || 20.9,
-        };
-        setCalibrationValues(values);
-        setCo2Input(values.co2.toString());
-        setO2Input(values.o2.toString());
-        
-        // Note: CO calibration always starts fresh (uncalibrated state)
-        // Old calibration data is not loaded to avoid showing stale results
+        if (data.CO) {
+          setCoData(data.CO);
+          setCoReference(data.CO.reference_value.toString());
+        }
+        if (data.CO2) {
+          setCo2Data(data.CO2);
+          setCo2Reference(data.CO2.reference_value.toString());
+        }
+        if (data.O2) {
+          setO2Data(data.O2);
+          setO2Reference(data.O2.reference_value.toString());
+        }
       } catch (error) {
         console.error('Error fetching calibration:', error);
       }
@@ -79,49 +112,68 @@ const Calibration = () => {
     fetchCalibration();
   }, []);
 
-  // Real-time sensor reading for CO calibration
+  // Real-time sensor reading during calibration
   useEffect(() => {
-    if (coCalibrationStep === 'idle' || coCalibrationStep === 'computing' || coCalibrationStep === 'complete') {
+    if (!activeGas || calibrationStep === 'idle' || calibrationStep === 'computing' || calibrationStep === 'complete') {
       return;
     }
 
     const interval = setInterval(async () => {
       try {
         const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php');
-        const data = await response.json();
-        setCurrentReading(parseFloat(data.co) || 0);
+        const sensorData = await response.json();
+        
+        let reading = 0;
+        if (activeGas === 'CO') {
+          reading = parseFloat(sensorData.co) || 0;
+        } else if (activeGas === 'CO2') {
+          reading = (parseFloat(sensorData.co2) || 0) / 10000; // Convert ppm to %
+        } else if (activeGas === 'O2') {
+          reading = parseFloat(sensorData.o2) || 0;
+        }
+        
+        setCurrentReading(reading);
       } catch (error) {
         console.error('Error fetching sensor data:', error);
       }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [coCalibrationStep]);
+  }, [activeGas, calibrationStep]);
 
-  const startCalibrationStep = async (step: '500ppm' | '100ppm' | '50ppm') => {
-    setCoCalibrationStep(step);
+  const startCalibration = async (gasType: GasType, trialNumber: 1 | 2 | 3) => {
+    setActiveGas(gasType);
+    setCalibrationStep(trialNumber === 1 ? 'trial1' : trialNumber === 2 ? 'trial2' : 'trial3');
     setCaptureProgress(0);
     setReadingsCollected(0);
 
-    const gasConcentrations = { '500ppm': 500, '100ppm': 100, '50ppm': 50 };
+    const gasUnit = gasType === 'CO' ? 'ppm' : '%';
     
     toast({
-      title: `Starting ${gasConcentrations[step]}ppm Calibration`,
-      description: "Collecting 10 readings over 60 seconds...",
+      title: `${gasType} Trial ${trialNumber} Started`,
+      description: `Collecting 10 readings over 60 seconds...`,
     });
 
     try {
       const readings: number[] = [];
       const totalReadings = 10;
-      const intervalMs = 6000; // 6 seconds between readings (10 readings in 60 seconds)
+      const intervalMs = 6000; // 6 seconds between readings
 
       for (let i = 0; i < totalReadings; i++) {
         try {
           const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php');
           const sensorData = await response.json();
-          const reading = parseFloat(sensorData.co) || 0;
-          readings.push(reading);
           
+          let reading = 0;
+          if (gasType === 'CO') {
+            reading = parseFloat(sensorData.co) || 0;
+          } else if (gasType === 'CO2') {
+            reading = (parseFloat(sensorData.co2) || 0) / 10000; // Convert to %
+          } else if (gasType === 'O2') {
+            reading = parseFloat(sensorData.o2) || 0;
+          }
+          
+          readings.push(reading);
           setReadingsCollected(i + 1);
           setCaptureProgress(((i + 1) / totalReadings) * 100);
           
@@ -129,7 +181,7 @@ const Calibration = () => {
             await new Promise(resolve => setTimeout(resolve, intervalMs));
           }
         } catch (error) {
-          console.error("Error reading sensor during capture:", error);
+          console.error("Error reading sensor:", error);
         }
       }
 
@@ -137,118 +189,134 @@ const Calibration = () => {
         throw new Error("No sensor readings captured");
       }
 
-      // Save readings to state
-      const updatedData = { ...coCalibrationData };
-      if (step === '500ppm') updatedData.gas_500 = readings;
-      else if (step === '100ppm') updatedData.gas_100 = readings;
-      else if (step === '50ppm') updatedData.gas_50 = readings;
-      
-      setCoCalibrationData(updatedData);
+      const average = readings.reduce((a, b) => a + b, 0) / readings.length;
+
+      // Update the appropriate gas data
+      const updateData = (data: GasCalibrationData): GasCalibrationData => {
+        const newData = { ...data };
+        if (trialNumber === 1) {
+          newData.trial_1_readings = readings;
+          newData.trial_1_avg = average;
+        } else if (trialNumber === 2) {
+          newData.trial_2_readings = readings;
+          newData.trial_2_avg = average;
+        } else if (trialNumber === 3) {
+          newData.trial_3_readings = readings;
+          newData.trial_3_avg = average;
+        }
+        return newData;
+      };
+
+      let updatedData: GasCalibrationData;
+      if (gasType === 'CO') {
+        updatedData = updateData(coData);
+        setCoData(updatedData);
+      } else if (gasType === 'CO2') {
+        updatedData = updateData(co2Data);
+        setCo2Data(updatedData);
+      } else {
+        updatedData = updateData(o2Data);
+        setO2Data(updatedData);
+      }
 
       toast({
-        title: `${gasConcentrations[step]}ppm Calibration Complete`,
-        description: `Collected ${readings.length} readings. Average: ${(readings.reduce((a, b) => a + b, 0) / readings.length).toFixed(2)} ppm`,
+        title: `${gasType} Trial ${trialNumber} Complete`,
+        description: `Average: ${average.toFixed(3)} ${gasUnit}`,
       });
 
-      // Auto-advance to next step or compute
-      if (step === '500ppm') {
-        setCoCalibrationStep('idle');
-      } else if (step === '100ppm') {
-        setCoCalibrationStep('idle');
-      } else if (step === '50ppm') {
-        // All gases captured, compute results
-        computeCalibrationResults(updatedData);
+      setCalibrationStep('idle');
+      setActiveGas(null);
+
+      // If all 3 trials are complete, compute results
+      if (trialNumber === 3) {
+        await computeCalibration(gasType, updatedData);
       }
     } catch (error) {
-      console.error('Error capturing CO data:', error);
+      console.error('Error during calibration:', error);
       toast({
         title: "Calibration Failed",
-        description: "Failed to capture sensor data. Check ESP32 connection.",
+        description: "Failed to capture sensor data.",
         variant: "destructive",
       });
-      setCoCalibrationStep('idle');
+      setCalibrationStep('idle');
+      setActiveGas(null);
     }
   };
 
-  const computeCalibrationResults = async (data: CoCalibrationData) => {
-    setCoCalibrationStep('computing');
+  const computeCalibration = async (gasType: GasType, data: GasCalibrationData) => {
+    setActiveGas(gasType);
+    setCalibrationStep('computing');
 
     try {
-      // Reference values (expected concentrations)
-      const references = [500, 100, 50];
+      const referenceValue = data.reference_value;
       
-      // Measured averages
-      const measured = [
-        data.gas_500.reduce((a, b) => a + b, 0) / data.gas_500.length,
-        data.gas_100.reduce((a, b) => a + b, 0) / data.gas_100.length,
-        data.gas_50.reduce((a, b) => a + b, 0) / data.gas_50.length,
-      ];
+      // Get the 3 trial averages
+      const trialAverages = [data.trial_1_avg, data.trial_2_avg, data.trial_3_avg];
+      
+      // One-sample t-test: comparing trial averages to reference value
+      // H0: mean of trials = reference value
+      const n = trialAverages.length;
+      const sampleMean = trialAverages.reduce((a, b) => a + b, 0) / n;
+      const sampleVariance = trialAverages.reduce((sum, x) => sum + Math.pow(x - sampleMean, 2), 0) / (n - 1);
+      const sampleStdDev = Math.sqrt(sampleVariance);
+      const standardError = sampleStdDev / Math.sqrt(n);
+      
+      const tValue = standardError !== 0 ? (sampleMean - referenceValue) / standardError : 0;
+      
+      // Critical value for df=2, α=0.05 (two-tailed) is ±4.303
+      const criticalValue = 4.303;
+      const passed = Math.abs(tValue) <= criticalValue;
 
-      // Calculate differences (D = measured - reference)
-      const differences = measured.map((m, i) => m - references[i]);
-      
-      // Paired t-test calculation
-      // Formula: t = mean(D) / (SD(D) / sqrt(n))
-      // Where SD(D) = sqrt(Σ(D²) - (ΣD)²/n) / (n-1))
-      const n = differences.length;
-      const sumD = differences.reduce((a, b) => a + b, 0);
-      const meanD = sumD / n;
-      const sumD2 = differences.reduce((a, b) => a + (b * b), 0);
-      
-      // Standard deviation of differences
-      const varianceD = (sumD2 - (sumD * sumD / n)) / (n - 1);
-      const sdD = Math.sqrt(varianceD);
-      
-      // Standard error
-      const se = sdD / Math.sqrt(n);
-      
-      // T-value
-      const tValue = se !== 0 ? meanD / se : 0;
+      // Linear regression: x = measured (trial averages), y = reference value (repeated 3 times)
+      // In this case, we're calibrating so measured values should map to reference value
+      // We'll use a simpler approach: correction_factor = reference / mean_measured
+      const correctionSlope = sampleMean !== 0 ? referenceValue / sampleMean : 1;
+      const correctionIntercept = 0; // For multiplicative correction
 
-      // Critical value for df=2, α=0.05 is ±2.045
-      const passed = Math.abs(tValue) <= 2.045;
-
-      // Linear regression for correction factor
-      // y = mx + b where y = reference, x = measured
-      const sumX = measured.reduce((a, b) => a + b, 0);
-      const sumY = references.reduce((a, b) => a + b, 0);
-      const sumXY = measured.reduce((sum, x, i) => sum + (x * references[i]), 0);
-      const sumX2 = measured.reduce((a, b) => a + (b * b), 0);
-      
-      const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
-      const intercept = (sumY - slope * sumX) / n;
-
-      const finalData: CoCalibrationData = {
+      const finalData: GasCalibrationData = {
         ...data,
         t_value: tValue,
         passed: passed,
-        correction_slope: slope,
-        correction_intercept: intercept,
+        correction_slope: correctionSlope,
+        correction_intercept: correctionIntercept,
       };
 
       // Save to database
-      await fetch('http://192.168.1.10/chrono-state/php-backend/save_co_calibration.php', {
+      await fetch('http://192.168.1.10/chrono-state/php-backend/save_unified_calibration.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          gas_500: data.gas_500,
-          gas_100: data.gas_100,
-          gas_50: data.gas_50,
+          gas_type: gasType,
+          reference_value: referenceValue,
+          trial_1_readings: data.trial_1_readings,
+          trial_2_readings: data.trial_2_readings,
+          trial_3_readings: data.trial_3_readings,
+          trial_1_avg: data.trial_1_avg,
+          trial_2_avg: data.trial_2_avg,
+          trial_3_avg: data.trial_3_avg,
           t_value: tValue,
           passed: passed ? 1 : 0,
-          correction_slope: slope,
-          correction_intercept: intercept,
+          correction_slope: correctionSlope,
+          correction_intercept: correctionIntercept,
         }),
       });
 
-      setCoCalibrationData(finalData);
-      setCoCalibrationStep('complete');
+      if (gasType === 'CO') setCoData(finalData);
+      else if (gasType === 'CO2') setCo2Data(finalData);
+      else setO2Data(finalData);
 
+      setCalibrationStep('complete');
+      
       toast({
-        title: passed ? "Calibration Passed ✓" : "Calibration Failed ✗",
-        description: `T-value: ${tValue.toFixed(4)} (Critical: ±2.045)`,
+        title: passed ? `${gasType} Calibration Passed ✓` : `${gasType} Calibration Failed ✗`,
+        description: `T-value: ${tValue.toFixed(4)} (Critical: ±${criticalValue})`,
         variant: passed ? "default" : "destructive",
       });
+
+      setTimeout(() => {
+        setCalibrationStep('idle');
+        setActiveGas(null);
+      }, 2000);
     } catch (error) {
       console.error('Error computing calibration:', error);
       toast({
@@ -256,90 +324,235 @@ const Calibration = () => {
         description: "Failed to compute calibration results",
         variant: "destructive",
       });
-      setCoCalibrationStep('idle');
+      setCalibrationStep('idle');
+      setActiveGas(null);
     }
   };
 
-  const resetCalibration = () => {
-    setCoCalibrationStep('idle');
-    setCoCalibrationData({
-      gas_500: [],
-      gas_100: [],
-      gas_50: [],
+  const resetCalibration = (gasType: GasType) => {
+    const emptyData: GasCalibrationData = {
+      reference_value: gasType === 'O2' ? 20.9 : 0,
+      trial_1_readings: [],
+      trial_2_readings: [],
+      trial_3_readings: [],
+      trial_1_avg: 0,
+      trial_2_avg: 0,
+      trial_3_avg: 0,
       t_value: null,
       passed: null,
       correction_slope: 1,
       correction_intercept: 0,
+    };
+
+    if (gasType === 'CO') {
+      setCoData(emptyData);
+      setCoReference("0");
+    } else if (gasType === 'CO2') {
+      setCo2Data(emptyData);
+      setCo2Reference("0");
+    } else {
+      setO2Data(emptyData);
+      setO2Reference("20.9");
+    }
+
+    toast({
+      title: `${gasType} Calibration Reset`,
+      description: "All calibration data cleared",
     });
-    setCaptureProgress(0);
-    setReadingsCollected(0);
   };
 
+  const saveReferenceValue = (gasType: GasType) => {
+    let value: number;
+    let data: GasCalibrationData;
 
-  const handleSaveCO2 = async () => {
-    const value = parseFloat(co2Input);
-    if (isNaN(value) || value < 0) {
+    if (gasType === 'CO') {
+      value = parseFloat(coReference);
+      data = { ...coData, reference_value: value };
+      setCoData(data);
+    } else if (gasType === 'CO2') {
+      value = parseFloat(co2Reference);
+      data = { ...co2Data, reference_value: value };
+      setCo2Data(data);
+    } else {
+      value = parseFloat(o2Reference);
+      data = { ...o2Data, reference_value: value };
+      setO2Data(data);
+    }
+
+    if (isNaN(value)) {
       toast({
         title: "Invalid Value",
-        description: "Please enter a valid CO₂ calibration value",
+        description: "Please enter a valid reference value",
         variant: "destructive",
       });
       return;
     }
 
-    try {
-      await fetch('http://192.168.1.10/chrono-state/php-backend/save_calibration.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gas_type: 'CO2', value }),
-      });
-
-      const newValues = { ...calibrationValues, co2: value };
-      setCalibrationValues(newValues);
-      toast({
-        title: "CO₂ Calibration Saved",
-        description: `Calibrated CO₂ value: ${value}%`,
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save CO₂ calibration",
-        variant: "destructive",
-      });
-    }
+    toast({
+      title: `${gasType} Reference Set`,
+      description: `Reference value: ${value} ${gasType === 'CO' ? 'ppm' : '%'}`,
+    });
   };
 
-  const handleSaveO2 = async () => {
-    const value = parseFloat(o2Input);
-    if (isNaN(value) || value < 0 || value > 100) {
-      toast({
-        title: "Invalid Value",
-        description: "Please enter a valid O₂ calibration value (0-100%)",
-        variant: "destructive",
-      });
-      return;
-    }
+  const renderGasCalibration = (
+    gasType: GasType,
+    data: GasCalibrationData,
+    referenceInput: string,
+    setReferenceInput: (value: string) => void,
+    icon: React.ReactNode,
+    color: string
+  ) => {
+    const unit = gasType === 'CO' ? 'ppm' : '%';
+    const isActive = activeGas === gasType;
+    const canStartTrial = data.reference_value > 0 && !isActive;
 
-    try {
-      await fetch('http://192.168.1.10/chrono-state/php-backend/save_calibration.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gas_type: 'O2', value }),
-      });
+    return (
+      <Card className="md:col-span-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {icon}
+            {gasType === 'CO' && 'Carbon Monoxide (CO)'}
+            {gasType === 'CO2' && 'Carbon Dioxide (CO₂)'}
+            {gasType === 'O2' && 'Oxygen (O₂)'}
+            {data.passed !== null && (
+              <Badge variant={data.passed ? "default" : "destructive"} className="ml-2">
+                {data.passed ? <CheckCircle className="w-3 h-3 mr-1" /> : <XCircle className="w-3 h-3 mr-1" />}
+                {data.passed ? 'Passed' : 'Failed'}
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>Statistical calibration with 3 trials</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Reference Value Input */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor={`${gasType}-reference`}>
+                Laboratory Reference Value ({unit})
+              </Label>
+              <Input
+                id={`${gasType}-reference`}
+                type="number"
+                step={gasType === 'CO' ? "1" : "0.01"}
+                value={referenceInput}
+                onChange={(e) => setReferenceInput(e.target.value)}
+                placeholder={`Enter ${gasType} reference value`}
+                disabled={isActive}
+              />
+              <Button 
+                onClick={() => saveReferenceValue(gasType)}
+                disabled={isActive}
+                size="sm"
+                variant="outline"
+              >
+                Set Reference
+              </Button>
+            </div>
 
-      const newValues = { ...calibrationValues, o2: value };
-      setCalibrationValues(newValues);
-      toast({
-        title: "O₂ Calibration Saved",
-        description: `Calibrated O₂ value: ${value}%`,
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save O₂ calibration",
-        variant: "destructive",
-      });
-    }
+            {data.reference_value > 0 && (
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Current Reference</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {data.reference_value.toFixed(gasType === 'CO' ? 0 : 2)} <span className="text-base font-normal">{unit}</span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Current Reading Display */}
+          {isActive && (
+            <div className={`p-4 rounded-lg border-2`} style={{ backgroundColor: `${color}15`, borderColor: color }}>
+              <p className="text-sm text-muted-foreground mb-1">Current Sensor Reading</p>
+              <p className="text-3xl font-bold text-foreground">
+                {currentReading.toFixed(gasType === 'CO' ? 2 : 3)} <span className="text-base font-normal">{unit}</span>
+              </p>
+            </div>
+          )}
+
+          {/* Progress Display */}
+          {isActive && calibrationStep !== 'idle' && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">
+                  Collecting readings... ({readingsCollected}/10)
+                </span>
+                <span className="font-medium">{Math.round(captureProgress)}%</span>
+              </div>
+              <Progress value={captureProgress} className="h-3" />
+            </div>
+          )}
+
+          {/* 3 Trials */}
+          <div className="grid gap-4 md:grid-cols-3">
+            {[1, 2, 3].map((trialNum) => {
+              const trialReadings = trialNum === 1 ? data.trial_1_readings : trialNum === 2 ? data.trial_2_readings : data.trial_3_readings;
+              const trialAvg = trialNum === 1 ? data.trial_1_avg : trialNum === 2 ? data.trial_2_avg : data.trial_3_avg;
+              const isComplete = trialReadings.length > 0;
+
+              return (
+                <div key={trialNum} className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Trial {trialNum}</h3>
+                    {isComplete && (
+                      <Badge variant="default" className="bg-green-500">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Done
+                      </Badge>
+                    )}
+                  </div>
+                  {isComplete && (
+                    <div className="p-3 bg-muted rounded text-sm">
+                      <p className="text-muted-foreground">Average:</p>
+                      <p className="font-bold">
+                        {trialAvg.toFixed(gasType === 'CO' ? 2 : 3)} {unit}
+                      </p>
+                    </div>
+                  )}
+                  <Button
+                    onClick={() => startCalibration(gasType, trialNum as 1 | 2 | 3)}
+                    disabled={!canStartTrial || (trialNum > 1 && (trialNum === 2 ? data.trial_1_readings.length === 0 : data.trial_2_readings.length === 0))}
+                    className="w-full"
+                    variant={isComplete ? "outline" : "default"}
+                  >
+                    {isActive && calibrationStep === `trial${trialNum}` ? "Capturing..." : isComplete ? "Recapture" : "Start"}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Results */}
+          {data.t_value !== null && (
+            <Alert className={data.passed ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
+              <AlertTitle className={data.passed ? "text-green-900" : "text-red-900"}>
+                {data.passed ? "✓ Calibration Passed" : "✗ Calibration Failed"}
+              </AlertTitle>
+              <AlertDescription className={data.passed ? "text-green-800" : "text-red-800"}>
+                <div className="text-sm space-y-1 mt-2">
+                  <p><strong>T-value:</strong> {data.t_value.toFixed(4)} (Critical: ±4.303)</p>
+                  <p><strong>Correction Factor:</strong> {data.correction_slope.toFixed(4)}</p>
+                  <p className="text-xs mt-2">
+                    {data.passed 
+                      ? "The sensor measurements are statistically consistent with the reference value." 
+                      : "The sensor measurements differ significantly from the reference value. Recalibration recommended."}
+                  </p>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Reset Button */}
+          <Button 
+            onClick={() => resetCalibration(gasType)}
+            variant="outline"
+            className="w-full"
+            disabled={isActive}
+          >
+            Reset {gasType} Calibration
+          </Button>
+        </CardContent>
+      </Card>
+    );
   };
 
   return (
@@ -348,334 +561,66 @@ const Calibration = () => {
       <div className="container mx-auto px-4 py-6">
         <header className="mb-8">
           <h1 className="text-3xl font-bold text-foreground">Calibration</h1>
-          <p className="text-muted-foreground">System calibration and configuration</p>
+          <p className="text-muted-foreground">Statistical calibration with T-test validation</p>
         </header>
 
         <SystemStatus />
 
-        <div className="grid gap-6 md:grid-cols-4">
-          {/* Calibration Info */}
+        <div className="grid gap-6">
+          {/* Calibration Guidelines */}
           <Card className="md:col-span-4">
             <CardHeader>
               <CardTitle>Calibration Guidelines</CardTitle>
-              <CardDescription>Best practices for accurate calibration</CardDescription>
+              <CardDescription>Follow these steps for accurate calibration</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Perform calibration in a controlled environment</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Use certified calibration gases for accuracy</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Regular calibration ensures measurement accuracy</span>
-                </p>
-                <p className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Document all calibration values and dates</span>
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          {/* CO Calibration - 3-Gas Sequential Procedure */}
-          <Card className="md:col-span-4">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-red-500" />
-                Carbon Monoxide (CO) - Multi-Point Calibration
-              </CardTitle>
-              <CardDescription>Sequential 3-gas calibration with T-test validation</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
               <Alert className="border-amber-200 bg-amber-50">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <AlertTitle className="text-amber-900">Hardware Setup Requirements</AlertTitle>
                 <AlertDescription className="text-amber-800 text-sm">
                   <ul className="mt-2 space-y-1 list-disc list-inside">
-                    <li>Ensure hardware is properly connected and powered</li>
-                    <li>Verify calibration gas cylinders (500ppm, 100ppm, 50ppm) are ready</li>
-                    <li>Check gas lines are secure with no leaks</li>
-                    <li>Allow system to stabilize before each gas insertion</li>
-                    <li>Each gas capture takes 60 seconds (10 readings)</li>
+                    <li>Ensure ESP32 and sensors are properly connected and powered</li>
+                    <li>Use 10-liter concentrated gas from certified laboratory</li>
+                    <li>Enter the laboratory reference value before starting trials</li>
+                    <li>Each trial captures 10 samples over 60 seconds (6-second intervals)</li>
+                    <li>Complete all 3 trials for each gas to compute statistical validation</li>
+                    <li>Allow system to stabilize between trials</li>
+                    <li>T-test validates if sensor readings match reference value</li>
                   </ul>
                 </AlertDescription>
               </Alert>
-
-              {/* Current Reading Display */}
-              {(coCalibrationStep === '500ppm' || coCalibrationStep === '100ppm' || coCalibrationStep === '50ppm') && (
-                <div className="p-4 bg-primary/10 rounded-lg border-2 border-primary">
-                  <p className="text-sm text-muted-foreground mb-1">Current Sensor Reading</p>
-                  <p className="text-3xl font-bold text-foreground">
-                    {currentReading.toFixed(2)} <span className="text-base font-normal">ppm</span>
-                  </p>
-                </div>
-              )}
-
-              {/* Progress Display */}
-              {(coCalibrationStep === '500ppm' || coCalibrationStep === '100ppm' || coCalibrationStep === '50ppm') && (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      Collecting readings... ({readingsCollected}/10)
-                    </span>
-                    <span className="font-medium">{Math.round(captureProgress)}%</span>
-                  </div>
-                  <Progress value={captureProgress} className="h-3" />
-                </div>
-              )}
-
-              {/* Calibration Steps */}
-              <div className="grid gap-4 md:grid-cols-3">
-                {/* 500 PPM */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">Step 1: 500 ppm</h3>
-                    {coCalibrationData.gas_500.length > 0 && (
-                      <Badge variant="default" className="bg-green-500">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Done
-                      </Badge>
-                    )}
-                  </div>
-                  {coCalibrationData.gas_500.length > 0 && (
-                    <div className="p-3 bg-muted rounded text-sm">
-                      <p className="text-muted-foreground">Average:</p>
-                      <p className="font-bold">
-                        {(coCalibrationData.gas_500.reduce((a, b) => a + b, 0) / coCalibrationData.gas_500.length).toFixed(2)} ppm
-                      </p>
-                    </div>
-                  )}
-                  <Button
-                    onClick={() => startCalibrationStep('500ppm')}
-                    disabled={coCalibrationStep !== 'idle'}
-                    className="w-full"
-                    variant={coCalibrationData.gas_500.length > 0 ? "outline" : "default"}
-                  >
-                    {coCalibrationStep === '500ppm' ? "Capturing..." : coCalibrationData.gas_500.length > 0 ? "Recapture" : "Start"}
-                  </Button>
-                </div>
-
-                {/* 100 PPM */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">Step 2: 100 ppm</h3>
-                    {coCalibrationData.gas_100.length > 0 && (
-                      <Badge variant="default" className="bg-green-500">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Done
-                      </Badge>
-                    )}
-                  </div>
-                  {coCalibrationData.gas_100.length > 0 && (
-                    <div className="p-3 bg-muted rounded text-sm">
-                      <p className="text-muted-foreground">Average:</p>
-                      <p className="font-bold">
-                        {(coCalibrationData.gas_100.reduce((a, b) => a + b, 0) / coCalibrationData.gas_100.length).toFixed(2)} ppm
-                      </p>
-                    </div>
-                  )}
-                  <Button
-                    onClick={() => startCalibrationStep('100ppm')}
-                    disabled={coCalibrationStep !== 'idle' || coCalibrationData.gas_500.length === 0}
-                    className="w-full"
-                    variant={coCalibrationData.gas_100.length > 0 ? "outline" : "default"}
-                  >
-                    {coCalibrationStep === '100ppm' ? "Capturing..." : coCalibrationData.gas_100.length > 0 ? "Recapture" : "Start"}
-                  </Button>
-                </div>
-
-                {/* 50 PPM */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">Step 3: 50 ppm</h3>
-                    {coCalibrationData.gas_50.length > 0 && (
-                      <Badge variant="default" className="bg-green-500">
-                        <CheckCircle className="w-3 h-3 mr-1" />
-                        Done
-                      </Badge>
-                    )}
-                  </div>
-                  {coCalibrationData.gas_50.length > 0 && (
-                    <div className="p-3 bg-muted rounded text-sm">
-                      <p className="text-muted-foreground">Average:</p>
-                      <p className="font-bold">
-                        {(coCalibrationData.gas_50.reduce((a, b) => a + b, 0) / coCalibrationData.gas_50.length).toFixed(2)} ppm
-                      </p>
-                    </div>
-                  )}
-                  <Button
-                    onClick={() => startCalibrationStep('50ppm')}
-                    disabled={coCalibrationStep !== 'idle' || coCalibrationData.gas_100.length === 0}
-                    className="w-full"
-                    variant={coCalibrationData.gas_50.length > 0 ? "outline" : "default"}
-                  >
-                    {coCalibrationStep === '50ppm' ? "Capturing..." : coCalibrationData.gas_50.length > 0 ? "Recapture" : "Start"}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Results Display */}
-              {coCalibrationStep === 'complete' && coCalibrationData.t_value !== null && (
-                <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-                  <h3 className="font-semibold text-lg">Calibration Results</h3>
-                  
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="p-4 bg-background rounded-lg">
-                      <p className="text-sm text-muted-foreground mb-1">T-Test Value</p>
-                      <p className="text-2xl font-bold">
-                        {typeof coCalibrationData.t_value === 'number'
-                          ? coCalibrationData.t_value.toFixed(4)
-                          : 'N/A'}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Critical range: -2.045 to +2.045
-                      </p>
-                    </div>
-
-                    <div className={`p-4 rounded-lg ${coCalibrationData.passed ? 'bg-green-100 dark:bg-green-950' : 'bg-red-100 dark:bg-red-950'}`}>
-                      <p className="text-sm text-muted-foreground mb-1">Status</p>
-                      <div className="flex items-center gap-2">
-                        {coCalibrationData.passed ? (
-                          <>
-                            <CheckCircle className="w-6 h-6 text-green-600" />
-                            <span className="text-2xl font-bold text-green-600">PASSED</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-6 h-6 text-red-600" />
-                            <span className="text-2xl font-bold text-red-600">FAILED</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="p-4 bg-background rounded-lg">
-                      <p className="text-sm text-muted-foreground mb-1">Correction Slope (m)</p>
-                      <p className="text-xl font-bold">
-                      {typeof coCalibrationData.t_value === 'number'
-                        ? coCalibrationData.correction_slope.toFixed(6)
-                        : 'N/A'}
-                    </p>
-
-                    </div>
-
-                    <div className="p-4 bg-background rounded-lg">
-                      <p className="text-sm text-muted-foreground mb-1">Correction Intercept (b)</p>
-                      <p className="text-xl font-bold">
-                        {typeof coCalibrationData.t_value === 'number'
-                          ? coCalibrationData.correction_intercept.toFixed(4)
-                          : 'N/A'}
-                      </p>
-
-                    </div>
-                  </div>
-
-                  <Alert className={coCalibrationData.passed ? "border-green-500 bg-green-50 dark:bg-green-950" : "border-red-500 bg-red-50 dark:bg-red-950"}>
-                    <AlertTitle className={coCalibrationData.passed ? "text-green-900 dark:text-green-100" : "text-red-900 dark:text-red-100"}>
-                      {coCalibrationData.passed ? "Calibration Accepted" : "Calibration Rejected"}
-                    </AlertTitle>
-                    <AlertDescription className={coCalibrationData.passed ? "text-green-800 dark:text-green-200" : "text-red-800 dark:text-red-200"}>
-                      {coCalibrationData.passed 
-                        ? "The sensor calibration meets the statistical acceptance criteria. The correction factors have been saved."
-                        : "The sensor calibration does not meet the statistical acceptance criteria. Please check your hardware setup and try again."
-                      }
-                    </AlertDescription>
-                  </Alert>
-
-                  <Button onClick={resetCalibration} variant="outline" className="w-full">
-                    Start New Calibration
-                  </Button>
-                </div>
-              )}
-
-              {coCalibrationStep === 'computing' && (
-                <div className="flex items-center justify-center py-8">
-                  <div className="text-center space-y-3">
-                    <Settings className="w-12 h-12 animate-spin mx-auto text-primary" />
-                    <p className="text-muted-foreground">Computing T-value and correction factors...</p>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
 
-          {/* CO2 Calibration - Manual Input */}
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Droplet className="w-5 h-5 text-orange-500" />
-                Carbon Dioxide (CO₂)
-              </CardTitle>
-              <CardDescription>Manual calibration value entry</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground mb-1">Current Calibrated Value</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {calibrationValues.co2.toFixed(2)} <span className="text-base font-normal">%</span>
-                </p>
-              </div>
+          {/* CO Calibration */}
+          {renderGasCalibration(
+            'CO',
+            coData,
+            coReference,
+            setCoReference,
+            <Activity className="w-5 h-5 text-red-500" />,
+            '#ef4444'
+          )}
 
-              <div className="space-y-2">
-                <Label htmlFor="co2-input">Enter Calibration Value (%)</Label>
-                <Input
-                  id="co2-input"
-                  type="number"
-                  step="0.01"
-                  value={co2Input}
-                  onChange={(e) => setCo2Input(e.target.value)}
-                  placeholder="Enter CO₂ value"
-                  className="text-lg"
-                />
-              </div>
+          {/* CO2 Calibration */}
+          {renderGasCalibration(
+            'CO2',
+            co2Data,
+            co2Reference,
+            setCo2Reference,
+            <Droplet className="w-5 h-5 text-orange-500" />,
+            '#f97316'
+          )}
 
-              <Button onClick={handleSaveCO2} className="w-full" size="lg">
-                <Settings className="w-4 h-4 mr-2" />
-                Save CO₂ Calibration
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* O2 Calibration - Manual Input */}
-          <Card className="md:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wind className="w-5 h-5 text-primary" />
-                Oxygen (O₂)
-              </CardTitle>
-              <CardDescription>Manual calibration value entry</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground mb-1">Current Calibrated Value</p>
-                <p className="text-2xl font-bold text-foreground">
-                  {calibrationValues.o2.toFixed(1)} <span className="text-base font-normal">%</span>
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="o2-input">Enter Calibration Value (%)</Label>
-                <Input
-                  id="o2-input"
-                  type="number"
-                  step="0.1"
-                  value={o2Input}
-                  onChange={(e) => setO2Input(e.target.value)}
-                  placeholder="Enter O₂ value"
-                  className="text-lg"
-                />
-              </div>
-
-              <Button onClick={handleSaveO2} className="w-full" size="lg">
-                <Settings className="w-4 h-4 mr-2" />
-                Save O₂ Calibration
-              </Button>
-            </CardContent>
-          </Card>
+          {/* O2 Calibration */}
+          {renderGasCalibration(
+            'O2',
+            o2Data,
+            o2Reference,
+            setO2Reference,
+            <Wind className="w-5 h-5 text-primary" />,
+            'hsl(var(--primary))'
+          )}
         </div>
       </div>
     </div>
