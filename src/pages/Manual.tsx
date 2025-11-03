@@ -100,7 +100,7 @@ const Manual = () => {
         <SystemStatus />
 
         <Card className="mb-8">
-          <CardContent>
+          <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Fan Control */}
               <Card
