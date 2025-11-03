@@ -56,13 +56,11 @@ const Calibration = () => {
   useEffect(() => {
     const fetchCalibration = async () => {
       try {
-        const [calibResponse, coCalibResponse] = await Promise.all([
+        const [calibResponse] = await Promise.all([
           fetch('http://192.168.1.10/chrono-state/php-backend/get_calibration.php'),
-          fetch('http://192.168.1.10/chrono-state/php-backend/get_co_calibration.php')
         ]);
         
         const calibData = await calibResponse.json();
-        const coCalibData = await coCalibResponse.json();
         
         const values = {
           co2: calibData.CO2?.value || 0,
@@ -72,20 +70,8 @@ const Calibration = () => {
         setCo2Input(values.co2.toString());
         setO2Input(values.o2.toString());
         
-        if (coCalibData.id) {
-          setCoCalibrationData({
-            gas_500: coCalibData.gas_500_readings || [],
-            gas_100: coCalibData.gas_100_readings || [],
-            gas_50: coCalibData.gas_50_readings || [],
-            t_value: coCalibData.t_value,
-            passed: coCalibData.passed === 1,
-            correction_slope: coCalibData.correction_slope || 1,
-            correction_intercept: coCalibData.correction_intercept || 0,
-          });
-          if (coCalibData.t_value !== null) {
-            setCoCalibrationStep('complete');
-          }
-        }
+        // Note: CO calibration always starts fresh (uncalibrated state)
+        // Old calibration data is not loaded to avoid showing stale results
       } catch (error) {
         console.error('Error fetching calibration:', error);
       }
@@ -201,15 +187,23 @@ const Calibration = () => {
       // Calculate differences (D = measured - reference)
       const differences = measured.map((m, i) => m - references[i]);
       
-      // T-test calculation
+      // Paired t-test calculation
+      // Formula: t = mean(D) / (SD(D) / sqrt(n))
+      // Where SD(D) = sqrt(Σ(D²) - (ΣD)²/n) / (n-1))
       const n = differences.length;
       const sumD = differences.reduce((a, b) => a + b, 0);
+      const meanD = sumD / n;
       const sumD2 = differences.reduce((a, b) => a + (b * b), 0);
-      const sumDSquared = sumD * sumD;
       
-      const numerator = sumD;
-      const denominator = Math.sqrt((sumD2 - (sumDSquared / n)) / ((n - 1) * n));
-      const tValue = denominator !== 0 ? numerator / denominator : 0;
+      // Standard deviation of differences
+      const varianceD = (sumD2 - (sumD * sumD / n)) / (n - 1);
+      const sdD = Math.sqrt(varianceD);
+      
+      // Standard error
+      const se = sdD / Math.sqrt(n);
+      
+      // T-value
+      const tValue = se !== 0 ? meanD / se : 0;
 
       // Critical value for df=2, α=0.05 is ±2.045
       const passed = Math.abs(tValue) <= 2.045;
@@ -304,7 +298,7 @@ const Calibration = () => {
       setCalibrationValues(newValues);
       toast({
         title: "CO₂ Calibration Saved",
-        description: `Calibrated CO₂ value: ${value} ppm`,
+        description: `Calibrated CO₂ value: ${value}%`,
       });
     } catch (error) {
       toast({
@@ -622,15 +616,16 @@ const Calibration = () => {
               <div className="p-4 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground mb-1">Current Calibrated Value</p>
                 <p className="text-2xl font-bold text-foreground">
-                  {calibrationValues.co2.toFixed(0)} <span className="text-base font-normal">ppm</span>
+                  {calibrationValues.co2.toFixed(2)} <span className="text-base font-normal">%</span>
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="co2-input">Enter Calibration Value (ppm)</Label>
+                <Label htmlFor="co2-input">Enter Calibration Value (%)</Label>
                 <Input
                   id="co2-input"
                   type="number"
+                  step="0.01"
                   value={co2Input}
                   onChange={(e) => setCo2Input(e.target.value)}
                   placeholder="Enter CO₂ value"
