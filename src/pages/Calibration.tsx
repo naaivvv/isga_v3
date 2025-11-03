@@ -359,9 +359,9 @@ const Calibration = () => {
 
         <SystemStatus />
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-4">
           {/* Calibration Info */}
-          <Card className="md:col-span-3">
+          <Card className="md:col-span-4">
             <CardHeader>
               <CardTitle>Calibration Guidelines</CardTitle>
               <CardDescription>Best practices for accurate calibration</CardDescription>
@@ -388,7 +388,7 @@ const Calibration = () => {
             </CardContent>
           </Card>
           {/* CO Calibration - 3-Gas Sequential Procedure */}
-          <Card className="md:col-span-3">
+          <Card className="md:col-span-4">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-red-500" />
@@ -602,7 +602,7 @@ const Calibration = () => {
           </Card>
 
           {/* CO2 Calibration - Manual Input */}
-          <Card>
+          <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Droplet className="w-5 h-5 text-orange-500" />
@@ -638,7 +638,7 @@ const Calibration = () => {
           </Card>
 
           {/* O2 Calibration - Manual Input */}
-          <Card>
+          <Card className="md:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Wind className="w-5 h-5 text-primary" />
