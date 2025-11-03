@@ -86,31 +86,8 @@ const Calibration = () => {
   const [captureProgress, setCaptureProgress] = useState(0);
   const [readingsCollected, setReadingsCollected] = useState(0);
 
-  // Load calibration data on mount
-  useEffect(() => {
-    const fetchCalibration = async () => {
-      try {
-        const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_unified_calibration.php');
-        const data = await response.json();
-        
-        if (data.CO) {
-          setCoData(data.CO);
-          setCoReference(data.CO.reference_value.toString());
-        }
-        if (data.CO2) {
-          setCo2Data(data.CO2);
-          setCo2Reference(data.CO2.reference_value.toString());
-        }
-        if (data.O2) {
-          setO2Data(data.O2);
-          setO2Reference(data.O2.reference_value.toString());
-        }
-      } catch (error) {
-        console.error('Error fetching calibration:', error);
-      }
-    };
-    fetchCalibration();
-  }, []);
+  // Start fresh on every page visit - no loading of old calibration data
+  // Users must perform new calibration each time
 
   // Real-time sensor reading during calibration
   useEffect(() => {
