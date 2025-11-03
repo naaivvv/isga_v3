@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Calendar, Clock, Play, Square, Timer, Zap } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import SystemStatus from "@/components/SystemStatus";
@@ -13,50 +13,47 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-// Import only the functions we actually need
-import { 
-  sendESP32Command, 
-  saveSchedule as saveScheduleApi 
-} from "@/lib/api";
-
-// Configuration for pre-reading sequence times (in milliseconds)
-const FAN_TIME_MS = 10000;
-const COMPRESSOR_TIME_MS = 10000;
-const SENSOR_READ_TIME_MS = 10000; // This is the wait time for the ESP32 to send its data
+// Import only the save function
+import { saveSchedule as saveScheduleApi, ScheduleConfig as ApiScheduleConfig } from "@/lib/api";
 
 interface SchedulingConfig {
   hours: number;
   minutes: number;
   active: boolean;
-  updatedAt?: string;
 }
+
+// --- New helper function to dispatch state changes ---
+const dispatchScheduleChange = () => {
+  window.dispatchEvent(new Event('scheduleChanged'));
+};
 
 const Scheduling = () => {
   const { toast } = useToast();
+  // This config is just for displaying in the input fields
   const [config, setConfig] = useState<SchedulingConfig>({
     hours: 0,
     minutes: 30,
     active: false,
   });
+  
+  // This state is now controlled by the listener
   const [remainingTime, setRemainingTime] = useState<number>(0);
-  const [isReading, setIsReading] = useState<boolean>(false);
+  const [isReading, setIsReading] = useState<boolean>(false); // This will be faked by timer=0
 
-  // --- Helper to save configuration to backend (using the imported API function) ---
+  // --- Helper to save configuration to backend ---
   const saveConfig = async (newConfig: SchedulingConfig, silent = false) => {
     try {
-      await saveScheduleApi({
+      const apiConfig: ApiScheduleConfig = {
         hours: newConfig.hours,
         minutes: newConfig.minutes,
         active: newConfig.active ? 1 : 0,
-      });
-      // Update local state immediately
-      setConfig({ ...newConfig, updatedAt: new Date().toISOString() });
+      };
+      await saveScheduleApi(apiConfig);
+      setConfig(newConfig); // Update local inputs
 
       if (!silent) {
-        // Trigger refresh event
-        setTimeout(() => {
-          window.dispatchEvent(new Event("schedulingUpdated"));
-        }, 500);
+        // --- Dispatch the event ---
+        dispatchScheduleChange();
       }
     } catch (error) {
       console.error("Error saving schedule:", error);
@@ -69,207 +66,18 @@ const Scheduling = () => {
   };
   
   // --- Deactivate Scheduling (Manual Stop) ---
-  const handleDeactivate = (silent = false) => {
+  const handleDeactivate = () => {
     const newConfig = { ...config, active: false };
-    setConfig(newConfig); 
-    setIsReading(false); 
-    setRemainingTime(0);
-    saveConfig(newConfig, true); 
-
-    if (!silent) {
-      toast({
-        title: "Scheduling Deactivated",
-        description: "Automatic sensor readings have been stopped.",
-      });
-    }
-  };
-
-
-  // --- Execute the Sensor Reading Cycle ---
-  const executeReadingCycle = useCallback(async () => {
-    if (!config.active) {
-        console.log("Cycle aborted: Schedule is inactive.");
-        setIsReading(false);
-        setRemainingTime(0);
-        return;
-    }
-
-    setIsReading(true);
-    let commandsSuccessful = false;
-
-    toast({
-      title: "Cycle Started",
-      description: "Executing automatic sensor reading sequence...",
-    });
-
-    try {
-      // --- Start of ESP32 Control Sequence ---
-      
-      try {
-        // 1. Turn on Fan for 10 seconds
-        await sendESP32Command('fan', true);
-        toast({ title: "Fan ON", description: "Starting ventilation." });
-        await new Promise(resolve => setTimeout(resolve, FAN_TIME_MS));
-        await sendESP32Command('fan', false);
-        toast({ title: "Fan OFF", description: "Ventilation complete." });
-
-        // 2. Turn on Compressor for 10 seconds
-        await sendESP32Command('compressor', true);
-        toast({ title: "Compressor ON", description: "Starting gas sampling." });
-        await new Promise(resolve => setTimeout(resolve, COMPRESSOR_TIME_MS));
-        await sendESP32Command('compressor', false);
-        toast({ title: "Compressor OFF", description: "Sampling complete." });
-
-        // 3. Wait for Sensor Reading
-        // During this 10-second window, the ESP32's 10-second loop 
-        // will fire and it will send its data to sensor_value.php
-        toast({
-          title: "Reading Sensors",
-          description: "Waiting for device to save data... (10s)",
-        });
-        await new Promise(resolve => setTimeout(resolve, SENSOR_READ_TIME_MS));
-        
-        // We assume the commands were sent successfully.
-        // The ESP32 is responsible for the actual data.
-        commandsSuccessful = true;
-
-        toast({
-          title: "Cycle Complete",
-          description: "Device has saved its new reading.",
-          duration: 4000,
-        });
-
-      } catch (error) {
-        // Hardware or API Error catch
-        console.error("Hardware or API Error during reading cycle:", error);
-        toast({
-          title: "Hardware Warning",
-          description: "Failed to communicate with ESP32. Resetting countdown.",
-          variant: "destructive",
-        });
-        // Attempt to ensure devices are turned off anyway
-        await sendESP32Command('fan', false).catch(() => {});
-        await sendESP32Command('compressor', false).catch(() => {});
-      }
-      
-      // --- End of Sequence ---
-
-    } catch (error) {
-      // General error catch
-      console.error("Critical Error in Cycle Execution:", error);
-    } finally {
-      setIsReading(false);
-      
-      // Only restart the countdown if the schedule is still active.
-      if (config.active) {
-        // 4. Restart Countdown on the client
-        const totalSeconds = config.hours * 3600 + config.minutes * 60;
-        setRemainingTime(totalSeconds);
-        
-        // Update DB to reset the 'updated_at' timestamp
-        saveConfig({ ...config, active: true }, true); 
-        
-        const cycleStatus = commandsSuccessful ? "Commands Sent" : "Failed - Hardware Offline";
-        toast({
-          title: `Cycle Finished (${cycleStatus})`,
-          description: `Next reading in ${config.hours}h ${config.minutes}m`,
-          duration: 3000,
-        });
-      } else {
-        // If config.active is false (manually stopped)
-        setRemainingTime(0);
-        console.log("Countdown reset aborted: Schedule was manually deactivated.");
-      }
-    }
-  }, [config.hours, config.minutes, config.active, toast, saveConfig]);
-
-  // --- Handle Cycle Completion (Trigger the reading cycle) ---
-  const handleCycleCompletion = () => {
-    if (!config.active) return;
+    setConfig(newConfig);
+    saveConfig(newConfig, true); // Silently save
+    
+    // --- Dispatch the event ---
+    dispatchScheduleChange();
     
     toast({
-      title: "Countdown Finished",
-      description: "Time for the next automatic sensor reading.",
+      title: "Scheduling Deactivated",
+      description: "Automatic sensor readings have been stopped.",
     });
-    executeReadingCycle();
-  };
-
-
-  // --- Fetch schedule from backend ---
-  useEffect(() => {
-    const fetchSchedule = async () => {
-      try {
-        // Make sure this URL is correct
-        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_schedule.php");
-        const data = await response.json();
-
-        const active = data.active === "1" || data.active === 1;
-        const hours = Number(data.hours) || 0;
-        const minutes = Number(data.minutes) || 0;
-        const updatedAt = data.updated_at;
-
-        setConfig({ hours, minutes, active, updatedAt });
-
-        if (active && updatedAt) {
-          const totalSeconds = hours * 3600 + minutes * 60;
-          const now = new Date();
-          const updatedTime = new Date(updatedAt.replace(" ", "T")); 
-          const elapsedSeconds = Math.floor((now.getTime() - updatedTime.getTime()) / 1000);
-          let remaining = totalSeconds - elapsedSeconds;
-
-          if (remaining > 0) {
-            setRemainingTime(remaining);
-          } else {
-            setRemainingTime(0);
-          }
-        } else {
-          setRemainingTime(0);
-        }
-      } catch (error) {
-        console.error("Error fetching schedule:", error);
-      }
-    };
-
-    fetchSchedule();
-  }, []); 
-
-  // --- Countdown effect ---
-  useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
-
-    if (config.active && remainingTime <= 1 && !isReading) {
-      if (remainingTime === 0) {
-          handleCycleCompletion();
-          return () => { if (timer) clearInterval(timer); };
-      }
-    }
-
-    if (config.active && remainingTime > 0 && !isReading) {
-      timer = setInterval(() => {
-        setRemainingTime((prev) => {
-          if (prev <= 1) {
-            clearInterval(timer!);
-            handleCycleCompletion(); 
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-
-    return () => {
-      if (timer) clearInterval(timer);
-    };
-  }, [config.active, remainingTime, isReading, handleCycleCompletion]);
-
-  // --- Convert seconds to HH:MM:SS ---
-  const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h.toString().padStart(2, "0")}:${m
-      .toString()
-      .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   };
 
   // --- Activate Scheduling ---
@@ -282,12 +90,11 @@ const Scheduling = () => {
       });
       return;
     }
-
     const newConfig = { ...config, active: true };
-    saveConfig(newConfig);
+    saveConfig(newConfig, true); // Silently save
 
-    const totalSeconds = config.hours * 3600 + config.minutes * 60;
-    setRemainingTime(totalSeconds);
+    // --- Dispatch the event ---
+    dispatchScheduleChange();
 
     toast({
       title: "Scheduling Activated",
@@ -295,15 +102,72 @@ const Scheduling = () => {
     });
   };
 
+  // --- Fetch schedule from backend (SIMPLE version) ---
+  useEffect(() => {
+    const fetchSchedule = async () => {
+      try {
+        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_schedule.php");
+        const data = await response.json();
+        const active = data.active === "1" || data.active === 1;
+        const hours = Number(data.hours) || 0;
+        const minutes = Number(data.minutes) || 0;
+        setConfig({ hours, minutes, active });
+      } catch (error) {
+        console.error("Error fetching schedule:", error);
+      }
+    };
+
+    fetchSchedule();
+    // Also listen for changes (e.g., if deactivated from another tab)
+    window.addEventListener('scheduleChanged', fetchSchedule);
+    return () => {
+      window.removeEventListener('scheduleChanged', fetchSchedule);
+    };
+  }, []); 
+
+  // --- New listener for timer synchronization ---
+  useEffect(() => {
+    const handleTimeUpdate = (event: CustomEvent) => {
+      const newTime = event.detail;
+      setRemainingTime(newTime);
+      // If time is 0 but schedule is active, it's reading
+      if (newTime === 0 && config.active) {
+        setIsReading(true);
+      } else {
+        setIsReading(false);
+      }
+    };
+    window.addEventListener('timeUpdated', handleTimeUpdate as EventListener);
+    return () => {
+      window.removeEventListener('timeUpdated', handleTimeUpdate as EventListener);
+    };
+  }, [config.active]); // Re-run if config.active changes
+
+  // --- Convert seconds to HH:MM:SS ---
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, "0")}:${m
+      .toString()
+      .padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
   // --- Handle input changes ---
   const handleHoursChange = (value: string) => {
     const hours = Math.max(0, Math.min(23, parseInt(value) || 0));
-    saveConfig({ ...config, hours }, true); // Silent save for input changes
+    setConfig(prev => ({ ...prev, hours }));
   };
 
   const handleMinutesChange = (value: string) => {
     const minutes = Math.max(0, Math.min(59, parseInt(value) || 0));
-    saveConfig({ ...config, minutes }, true); // Silent save for input changes
+    setConfig(prev => ({ ...prev, minutes }));
+  };
+  
+  // --- Save on blur ---
+  const handleSaveOnBlur = () => {
+    saveConfig(config, true);
+    dispatchScheduleChange();
   };
 
   return (
@@ -323,7 +187,6 @@ const Scheduling = () => {
           {/* Left panel */}
           <Card>
             <CardHeader>
-              {/* ... (rest of the JSX is unchanged) ... */}
               <CardTitle className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-primary" />
                 Interval Configuration
@@ -343,6 +206,7 @@ const Scheduling = () => {
                     max="23"
                     value={config.hours}
                     onChange={(e) => handleHoursChange(e.target.value)}
+                    onBlur={handleSaveOnBlur} // Save when user clicks away
                     className="text-lg"
                     disabled={config.active || isReading}
                   />
@@ -356,6 +220,7 @@ const Scheduling = () => {
                     max="59"
                     value={config.minutes}
                     onChange={(e) => handleMinutesChange(e.target.value)}
+                    onBlur={handleSaveOnBlur} // Save when user clicks away
                     className="text-lg"
                     disabled={config.active || isReading}
                   />
@@ -381,7 +246,7 @@ const Scheduling = () => {
                 </Button>
               ) : (
                 <Button
-                  onClick={() => handleDeactivate(false)}
+                  onClick={handleDeactivate}
                   variant="destructive"
                   className="w-full"
                   size="lg"
@@ -393,7 +258,7 @@ const Scheduling = () => {
             </CardContent>
           </Card>
 
-          {/* Right panel */}
+          {/* Right panel (now listens for updates) */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
