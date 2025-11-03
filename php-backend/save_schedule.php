@@ -30,7 +30,8 @@ $minutes = isset($data['minutes']) ? intval($data['minutes']) : 0;
 $active = isset($data['active']) ? intval($data['active']) : 0;
 
 // Update the schedule (always update the first/only row)
-$sql = "UPDATE schedule SET hours = ?, minutes = ?, active = ? WHERE id = 1";
+// Set updated_at to NOW() when schedule is modified
+$sql = "UPDATE schedule SET hours = ?, minutes = ?, active = ?, updated_at = NOW() WHERE id = 1";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("iii", $hours, $minutes, $active);
 

@@ -51,10 +51,8 @@ const Scheduling = () => {
       await saveScheduleApi(apiConfig);
       setConfig(newConfig); // Update local inputs
 
-      if (!silent) {
-        // --- Dispatch the event ---
-        dispatchScheduleChange();
-      }
+      // Always dispatch the event so SystemStatus can update immediately
+      dispatchScheduleChange();
     } catch (error) {
       console.error("Error saving schedule:", error);
       toast({
@@ -66,13 +64,10 @@ const Scheduling = () => {
   };
   
   // --- Deactivate Scheduling (Manual Stop) ---
-  const handleDeactivate = () => {
+  const handleDeactivate = async () => {
     const newConfig = { ...config, active: false };
     setConfig(newConfig);
-    saveConfig(newConfig, true); // Silently save
-    
-    // --- Dispatch the event ---
-    dispatchScheduleChange();
+    await saveConfig(newConfig);
     
     toast({
       title: "Scheduling Deactivated",
@@ -81,7 +76,7 @@ const Scheduling = () => {
   };
 
   // --- Activate Scheduling ---
-  const handleActivate = () => {
+  const handleActivate = async () => {
     if (config.hours === 0 && config.minutes === 0) {
       toast({
         title: "Invalid Configuration",
@@ -91,10 +86,7 @@ const Scheduling = () => {
       return;
     }
     const newConfig = { ...config, active: true };
-    saveConfig(newConfig, true); // Silently save
-
-    // --- Dispatch the event ---
-    dispatchScheduleChange();
+    await saveConfig(newConfig);
 
     toast({
       title: "Scheduling Activated",
@@ -166,8 +158,7 @@ const Scheduling = () => {
   
   // --- Save on blur ---
   const handleSaveOnBlur = () => {
-    saveConfig(config, true);
-    dispatchScheduleChange();
+    saveConfig(config);
   };
 
   return (

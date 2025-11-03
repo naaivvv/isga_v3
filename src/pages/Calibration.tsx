@@ -53,20 +53,42 @@ const Calibration = () => {
     setIsCapturing(true);
     setCaptureProgress(0);
 
-    const interval = setInterval(() => {
-      setCaptureProgress((prev) => Math.min(prev + 20, 100));
-    }, 1000);
+    toast({
+      title: "Capturing CO Data",
+      description: "Reading sensor values for 5 seconds...",
+    });
 
     try {
-      // Capture sensor data for 5 seconds
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      // Capture multiple readings over 5 seconds and average them
+      const readings: number[] = [];
+      const captureInterval = 500; // Read every 500ms
+      const totalDuration = 5000; // 5 seconds total
+      const numReadings = totalDuration / captureInterval;
 
-      // Fetch current CO reading from database
-      const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php');
-      const sensorData = await response.json();
+      for (let i = 0; i < numReadings; i++) {
+        try {
+          // Fetch current CO reading from database (updated by ESP32)
+          const response = await fetch('http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php');
+          const sensorData = await response.json();
+          const reading = parseFloat(sensorData.co) || 0;
+          readings.push(reading);
+          
+          setCaptureProgress(((i + 1) / numReadings) * 100);
+          
+          if (i < numReadings - 1) {
+            await new Promise(resolve => setTimeout(resolve, captureInterval));
+          }
+        } catch (error) {
+          console.error("Error reading sensor during capture:", error);
+        }
+      }
 
-      // Ensure numeric conversion
-      const capturedValue = parseFloat(sensorData.co) || 0;
+      if (readings.length === 0) {
+        throw new Error("No sensor readings captured");
+      }
+
+      // Calculate average of all readings
+      const capturedValue = readings.reduce((sum, val) => sum + val, 0) / readings.length;
 
       // Save calibration to database
       await fetch('http://192.168.1.10/chrono-state/php-backend/save_calibration.php', {
@@ -75,23 +97,21 @@ const Calibration = () => {
         body: JSON.stringify({ gas_type: 'CO', value: capturedValue }),
       });
 
-      // Safely handle floating number formatting
       const newValues = { ...calibrationValues, co: capturedValue };
       setCalibrationValues(newValues);
 
       toast({
         title: "CO Calibration Complete",
-        description: `Calibrated value: ${capturedValue.toFixed(2)} ppm`,
+        description: `Calibrated value: ${capturedValue.toFixed(4)} ppm (${readings.length} readings averaged)`,
       });
     } catch (error) {
       console.error('Error capturing CO data:', error);
       toast({
         title: "Calibration Failed",
-        description: "Failed to capture CO sensor data",
+        description: "Failed to capture CO sensor data. Check ESP32 connection.",
         variant: "destructive",
       });
     } finally {
-      clearInterval(interval);
       setIsCapturing(false);
       setCaptureProgress(0);
     }

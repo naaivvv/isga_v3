@@ -169,16 +169,17 @@ const SystemStatus = () => {
         const elapsedSeconds = Math.floor((now.getTime() - updatedTime.getTime()) / 1000);
         let remaining = totalSeconds - elapsedSeconds;
 
-        if (remaining > 0) {
-          setRemainingTime(remaining);
-          dispatchTimeUpdate(remaining);
-        } else {
-          setRemainingTime(0);
-          dispatchTimeUpdate(0);
+        // If remaining time is negative or the schedule was just activated, start fresh countdown
+        if (remaining <= 0 || elapsedSeconds < 2) {
+          remaining = totalSeconds;
         }
+        
+        setRemainingTime(remaining);
+        dispatchTimeUpdate(remaining);
       } else {
         setRemainingTime(0);
         dispatchTimeUpdate(0);
+        setIsReading(false);
       }
     } catch (error) {
       console.error("Error fetching scheduling status:", error);
