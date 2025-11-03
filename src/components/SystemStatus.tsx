@@ -2,6 +2,7 @@ import { AlertCircle, CheckCircle, Clock, Calendar, XCircle, Zap } from "lucide-
 import { useEffect, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useUptime } from "@/contexts/UptimeContext";
 import { 
   sendESP32Command, 
   saveSchedule as saveScheduleApi,
@@ -27,7 +28,7 @@ const dispatchTimeUpdate = (timeInSeconds: number) => {
 
 const SystemStatus = () => {
   const { toast } = useToast();
-  const [uptime, setUptime] = useState("00:00:00");
+  const { uptime: uptimeSeconds } = useUptime();
   const [connectionActive, setConnectionActive] = useState(false);
   
   // --- All state logic is moved here ---
@@ -115,18 +116,13 @@ const SystemStatus = () => {
     executeReadingCycle();
   }, [config.active, executeReadingCycle, toast]);
 
-  // --- Uptime timer ---
-  useEffect(() => {
-    let seconds = 0;
-    const interval = setInterval(() => {
-      seconds++;
-      const h = Math.floor(seconds / 3600);
-      const m = Math.floor((seconds % 3600) / 60);
-      const s = seconds % 60;
-      setUptime(`${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  // --- Format uptime from context ---
+  const formatUptime = (seconds: number): string => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
 
   // --- Check ESP32 connectivity ---
   useEffect(() => {
@@ -266,7 +262,7 @@ const SystemStatus = () => {
           className="bg-blue-50 text-blue-700 border-blue-200 px-3 py-1.5"
         >
           <Clock className="w-4 h-4 mr-2" />
-          Uptime: {uptime}
+          Uptime: {formatUptime(uptimeSeconds)}
         </Badge>
 
         {/* Scheduling */}
