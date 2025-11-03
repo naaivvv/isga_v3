@@ -130,8 +130,9 @@ const SystemStatus = () => {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 3000);
-        const response = await fetch("http://192.168.0.111", { // Assume IP is correct
-          method: "HEAD",
+        // Check if we can reach the PHP backend (which confirms ESP32 is sending data)
+        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php", {
+          method: "GET",
           signal: controller.signal,
         });
         clearTimeout(timeout);

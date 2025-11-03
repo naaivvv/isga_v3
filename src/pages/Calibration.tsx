@@ -199,30 +199,51 @@ const Calibration = () => {
       newTrials[trialNumber - 1] = trialData;
       setUnifiedTrials(newTrials);
 
-      // Update individual gas data
-      const updateGasData = (
-        currentData: GasCalibrationData,
-        readings: number[],
-        avg: number,
-        trialNum: number
-      ): GasCalibrationData => {
-        const newData = { ...currentData };
-        if (trialNum === 1) {
-          newData.trial_1_readings = readings;
-          newData.trial_1_avg = avg;
-        } else if (trialNum === 2) {
-          newData.trial_2_readings = readings;
-          newData.trial_2_avg = avg;
-        } else if (trialNum === 3) {
-          newData.trial_3_readings = readings;
-          newData.trial_3_avg = avg;
+      // Update individual gas data using functional state updates to avoid stale state
+      setCoData((prevData) => {
+        const newData = { ...prevData };
+        if (trialNumber === 1) {
+          newData.trial_1_readings = coReadings;
+          newData.trial_1_avg = coAvg;
+        } else if (trialNumber === 2) {
+          newData.trial_2_readings = coReadings;
+          newData.trial_2_avg = coAvg;
+        } else if (trialNumber === 3) {
+          newData.trial_3_readings = coReadings;
+          newData.trial_3_avg = coAvg;
         }
         return newData;
-      };
+      });
 
-      setCoData(updateGasData(coData, coReadings, coAvg, trialNumber));
-      setCo2Data(updateGasData(co2Data, co2Readings, co2Avg, trialNumber));
-      setO2Data(updateGasData(o2Data, o2Readings, o2Avg, trialNumber));
+      setCo2Data((prevData) => {
+        const newData = { ...prevData };
+        if (trialNumber === 1) {
+          newData.trial_1_readings = co2Readings;
+          newData.trial_1_avg = co2Avg;
+        } else if (trialNumber === 2) {
+          newData.trial_2_readings = co2Readings;
+          newData.trial_2_avg = co2Avg;
+        } else if (trialNumber === 3) {
+          newData.trial_3_readings = co2Readings;
+          newData.trial_3_avg = co2Avg;
+        }
+        return newData;
+      });
+
+      setO2Data((prevData) => {
+        const newData = { ...prevData };
+        if (trialNumber === 1) {
+          newData.trial_1_readings = o2Readings;
+          newData.trial_1_avg = o2Avg;
+        } else if (trialNumber === 2) {
+          newData.trial_2_readings = o2Readings;
+          newData.trial_2_avg = o2Avg;
+        } else if (trialNumber === 3) {
+          newData.trial_3_readings = o2Readings;
+          newData.trial_3_avg = o2Avg;
+        }
+        return newData;
+      });
 
       toast({
         title: `Trial ${trialNumber} Complete`,
@@ -232,8 +253,11 @@ const Calibration = () => {
       setCalibrationStep('idle');
 
       // If all 3 trials are complete, compute results for all gases
+      // Use setTimeout to ensure state updates have propagated
       if (trialNumber === 3 && newTrials.length === 3) {
-        await computeAllCalibrations();
+        setTimeout(() => {
+          computeAllCalibrations();
+        }, 100);
       }
     } catch (error) {
       console.error('Error during calibration:', error);
@@ -255,6 +279,15 @@ const Calibration = () => {
         data: GasCalibrationData,
         referenceValue: number
       ) => {
+        console.log(`Computing calibration for ${gasType}:`, {
+          trial_1_avg: data.trial_1_avg,
+          trial_2_avg: data.trial_2_avg,
+          trial_3_avg: data.trial_3_avg,
+          trial_1_readings: data.trial_1_readings,
+          trial_2_readings: data.trial_2_readings,
+          trial_3_readings: data.trial_3_readings,
+        });
+
         const trialAverages = [data.trial_1_avg, data.trial_2_avg, data.trial_3_avg];
         
         const n = trialAverages.length;
@@ -280,7 +313,7 @@ const Calibration = () => {
         };
 
         // Save to database
-        await fetch('http://192.168.1.10/chrono-state/php-backend/save_unified_calibration.php', {
+        const saveResponse = await fetch('http://192.168.1.10/chrono-state/php-backend/save_unified_calibration.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -298,6 +331,13 @@ const Calibration = () => {
             correction_intercept: correctionIntercept,
           }),
         });
+
+        if (!saveResponse.ok) {
+          console.error(`Failed to save ${gasType} calibration to database`);
+        } else {
+          const saveResult = await saveResponse.json();
+          console.log(`${gasType} calibration saved:`, saveResult);
+        }
 
         return { gasType, finalData, tValue, passed, criticalValue };
       };
