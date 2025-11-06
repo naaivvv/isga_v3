@@ -141,6 +141,33 @@ const Calibration = () => {
 
         <SystemStatus />
 
+        <Card className="mb-6 border-amber-200 bg-amber-50">
+          <CardContent className="pt-6">
+            <div className="flex gap-3">
+              <div className="flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-amber-900 mb-2">
+                  Pre-Calibration Checklist
+                </h4>
+                <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                  <li>Ensure ESP32 is connected and powered on</li>
+                  <li>Verify all sensors (CO, CO₂, O₂) are properly connected</li>
+                  <li>Allow sensors to warm up for at least 5 minutes before calibration</li>
+                  <li>Prepare laboratory-verified reference gas samples</li>
+                  <li>Ensure stable environmental conditions (temperature, humidity)</li>
+                  <li>Have calibration equipment and tools ready</li>
+                  <li>Each trial will take 60 seconds to collect 10 readings</li>
+                </ul>
+                <p className="text-sm text-amber-800 mt-3 font-medium">
+                  ⚠️ Do not interrupt the calibration process once started. Each trial must complete all readings for accurate results.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Alert className="mb-6">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Calibration Process</AlertTitle>
