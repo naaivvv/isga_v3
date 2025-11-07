@@ -27,7 +27,7 @@ export interface UnifiedTrialData {
 type CalibrationStep = 'idle' | 'trial1' | 'trial2' | 'trial3' | 'computing' | 'complete';
 type GasType = 'CO' | 'CO2' | 'O2';
 
-const BACKEND_URL = 'http://192.168.1.10/chrono-state/php-backend';
+const BACKEND_URL = 'http://192.168.1.10/isga_v3/php-backend';
 
 const createEmptyCalibrationData = (defaultRef = 0): GasCalibrationData => ({
   reference_value: defaultRef,

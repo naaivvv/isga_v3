@@ -23,7 +23,7 @@ const SensorDataCards = () => {
   useEffect(() => {
     const fetchCalibration = async () => {
       try {
-        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_unified_calibration.php");
+        const response = await fetch("http://192.168.1.10/isga_v3/php-backend/get_unified_calibration.php");
         const data = await response.json();
         
         if (data.CO) {
@@ -58,7 +58,7 @@ const SensorDataCards = () => {
   useEffect(() => {
     const fetchSensorData = async () => {
       try {
-        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php");
+        const response = await fetch("http://192.168.1.10/isga_v3/php-backend/get_sensor_data.php");
         const data = await response.json();
 
         // Get raw sensor values

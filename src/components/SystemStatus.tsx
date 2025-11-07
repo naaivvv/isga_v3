@@ -131,7 +131,7 @@ const SystemStatus = () => {
   }, [config.active, executeReadingCycle, toast]);
 
   // --- Format uptime from context ---
-  const formatUptime = (seconds: number): string => {isga_v3
+  const formatUptime = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
@@ -145,11 +145,11 @@ const SystemStatus = () => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 3000);
         // Check if we can reach the PHP backend (which confirms ESP32 is sending data)
-        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php", {
+        const response = await fetch("http://192.168.1.10/isga_v3/php-backend/get_sensor_data.php", {
           method: "GET",
           signal: controller.signal,
         });
-        clearTimeout(timeout);isga_v3
+        clearTimeout(timeout);
         setConnectionActive(response.ok);
       } catch {
         setConnectionActive(false);
@@ -163,7 +163,7 @@ const SystemStatus = () => {
   // --- Fetch scheduling status from backend (and calculate time) ---
   const fetchAndHandleSchedule = useCallback(async () => {
     try {
-      const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_schedule.php");
+      const response = await fetch("http://192.168.1.10/isga_v3/php-backend/get_schedule.php");
       const data = await response.json();
 
       const active = data.active === "1" || data.active === 1;

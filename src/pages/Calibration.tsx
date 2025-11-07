@@ -106,7 +106,7 @@ const Calibration = () => {
 
   const handleSaveReferences = () => {
     const coVal = parseFloat(coReference);
-    const co2Val = parseFloat(co2Reference);isga_v3
+    const co2Val = parseFloat(co2Reference);
     const o2Val = parseFloat(o2Reference);
 
     if (isNaN(coVal) || isNaN(co2Val) || isNaN(o2Val)) {
@@ -155,7 +155,7 @@ const Calibration = () => {
                   <li>Ensure ESP32 is connected and powered on</li>
                   <li>Verify all sensors (CO, CO₂, O₂) are properly connected</li>
                   <li>Allow sensors to warm up for at least 5 minutes before calibration</li>
-                  <li>Prepare laboratory-verified reference isga_v3/li>
+                  <li>Prepare laboratory-verified reference gas samples</li>
                   <li>Ensure stable environmental conditions (temperature, humidity)</li>
                   <li>Have calibration equipment and tools ready</li>
                   <li>Each trial will take 60 seconds to collect 10 readings</li>
@@ -286,4 +286,3 @@ const Calibration = () => {
 };
 
 export default Calibration;
-isga_v3

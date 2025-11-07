@@ -98,8 +98,8 @@ const Scheduling = () => {
   // --- Fetch schedule from backend (SIMPLE version) ---
   useEffect(() => {
     const fetchSchedule = async () => {
-      try {isga_v3
-        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_schedule.php");
+      try {
+        const response = await fetch("http://192.168.1.10/isga_v3/php-backend/get_schedule.php");
         const data = await response.json();
         const active = data.active === "1" || data.active === 1;
         const hours = Number(data.hours) || 0;
