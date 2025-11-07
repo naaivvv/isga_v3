@@ -4,7 +4,7 @@ import Navbar from "@/components/Navbar";
 import SystemStatus from "@/components/SystemStatus";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 
 interface CalibrationData {
   correction_slope: number;
@@ -135,28 +135,26 @@ const Index = () => {
                 }}
                 className="h-[200px] w-full"
               >
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historicalData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis 
-                      dataKey="timestamp" 
-                      tick={{ fontSize: 10 }}
-                      tickFormatter={(value) => {
-                        const date = new Date(value);
-                        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      }}
-                    />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Line 
-                      type="monotone" 
-                      dataKey="co" 
-                      stroke="hsl(var(--chart-1))" 
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <LineChart data={historicalData} width={400} height={200}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis 
+                    dataKey="timestamp" 
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(value) => {
+                      const date = new Date(value);
+                      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="co" 
+                    stroke="hsl(var(--chart-1))" 
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
               </ChartContainer>
             </CardContent>
           </Card>
@@ -180,28 +178,26 @@ const Index = () => {
                 }}
                 className="h-[200px] w-full"
               >
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historicalData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis 
-                      dataKey="timestamp" 
-                      tick={{ fontSize: 10 }}
-                      tickFormatter={(value) => {
-                        const date = new Date(value);
-                        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      }}
-                    />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Line 
-                      type="monotone" 
-                      dataKey="co2" 
-                      stroke="hsl(var(--chart-2))" 
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <LineChart data={historicalData} width={400} height={200}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis 
+                    dataKey="timestamp" 
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(value) => {
+                      const date = new Date(value);
+                      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="co2" 
+                    stroke="hsl(var(--chart-2))" 
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
               </ChartContainer>
             </CardContent>
           </Card>
@@ -225,28 +221,26 @@ const Index = () => {
                 }}
                 className="h-[200px] w-full"
               >
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={historicalData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis 
-                      dataKey="timestamp" 
-                      tick={{ fontSize: 10 }}
-                      tickFormatter={(value) => {
-                        const date = new Date(value);
-                        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      }}
-                    />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Line 
-                      type="monotone" 
-                      dataKey="o2" 
-                      stroke="hsl(var(--chart-3))" 
-                      strokeWidth={2}
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <LineChart data={historicalData} width={400} height={200}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis 
+                    dataKey="timestamp" 
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(value) => {
+                      const date = new Date(value);
+                      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    }}
+                  />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="o2" 
+                    stroke="hsl(var(--chart-3))" 
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                </LineChart>
               </ChartContainer>
             </CardContent>
           </Card>
