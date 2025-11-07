@@ -26,7 +26,7 @@ const Manual = () => {
     const fetchStates = async () => {
       try {
         // This URL should be correct, pointing to your PHP backend
-        const response = await fetch(
+        const response = await isga_v3
           "http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php",
         );
         const data = await response.json();

@@ -131,7 +131,7 @@ const SystemStatus = () => {
   }, [config.active, executeReadingCycle, toast]);
 
   // --- Format uptime from context ---
-  const formatUptime = (seconds: number): string => {
+  const formatUptime = (seconds: number): string => {isga_v3
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
@@ -149,7 +149,7 @@ const SystemStatus = () => {
           method: "GET",
           signal: controller.signal,
         });
-        clearTimeout(timeout);
+        clearTimeout(timeout);isga_v3
         setConnectionActive(response.ok);
       } catch {
         setConnectionActive(false);

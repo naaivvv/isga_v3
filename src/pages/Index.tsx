@@ -25,7 +25,7 @@ const Index = () => {
   // Calibration correction factors
   const [coCalibration, setCoCalibration] = useState<CalibrationData>({ correction_slope: 1, correction_intercept: 0, passed: 0 });
   const [co2Calibration, setCo2Calibration] = useState<CalibrationData>({ correction_slope: 1, correction_intercept: 0, passed: 0 });
-  const [o2Calibration, setO2Calibration] = useState<CalibrationData>({ correction_slope: 1, correction_intercept: 0, passed: 0 });
+  const [o2Calibration, setO2Calibration] = useState<Calibisga_v3{ correction_slope: 1, correction_intercept: 0, passed: 0 });
 
   // Load calibration data on mount
   useEffect(() => {
@@ -60,7 +60,7 @@ const Index = () => {
       }
     };
     fetchCalibration();
-  }, []);
+  }, []);isga_v3
 
   // Fetch historical sensor data and apply calibration
   useEffect(() => {
