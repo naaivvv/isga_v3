@@ -9,10 +9,10 @@ import {
   ScheduleConfig as ApiScheduleConfig // Renaming import to avoid conflict
 } from "@/lib/api";
 
-// --- Times copied from Scheduling.tsx ---
-const FAN_TIME_MS = 10000;
-const COMPRESSOR_TIME_MS = 10000;
-const SENSOR_READ_TIME_MS = 10000;
+// --- Times for scheduling sequence ---
+const COMPRESSOR_TIME_MS = 10000; // 10 seconds
+const FAN_TIME_MS = 30000; // 30 seconds
+const SENSOR_READ_TIME_MS = 10000; // 10 seconds for reading
 
 interface SchedulingConfig {
   hours: number;
@@ -68,23 +68,37 @@ const SystemStatus = () => {
     toast({ title: "Cycle Started", description: "Executing automatic sensor reading sequence..." });
     try {
       try {
-        await sendESP32Command('fan', true);
-        toast({ title: "Fan ON", description: "Starting ventilation." });
-        await new Promise(resolve => setTimeout(resolve, FAN_TIME_MS));
-        await sendESP32Command('fan', false);
-        toast({ title: "Fan OFF", description: "Ventilation complete." });
-
+        // Step 1: Turn on compressor for 10 seconds
         await sendESP32Command('compressor', true);
-        toast({ title: "Compressor ON", description: "Starting gas sampling." });
+        toast({ title: "Step 1/6", description: "Compressor ON - Starting gas sampling (10s)" });
         await new Promise(resolve => setTimeout(resolve, COMPRESSOR_TIME_MS));
+        
+        // Step 2: Turn off compressor
         await sendESP32Command('compressor', false);
-        toast({ title: "Compressor OFF", description: "Sampling complete." });
+        toast({ title: "Step 2/6", description: "Compressor OFF" });
 
-        toast({ title: "Reading Sensors", description: "Waiting for device to save data... (10s)" });
+        // Step 3: Turn on fan for 30 seconds
+        await sendESP32Command('fan', true);
+        toast({ title: "Step 3/6", description: "Fan ON - Starting ventilation (30s)" });
+        await new Promise(resolve => setTimeout(resolve, FAN_TIME_MS));
+        
+        // Step 4: Turn off fan
+        await sendESP32Command('fan', false);
+        toast({ title: "Step 4/6", description: "Fan OFF - Ventilation complete" });
+
+        // Step 5: Read readings for 10 seconds
+        toast({ title: "Step 5/6", description: "Reading sensors and saving data (10s)..." });
         await new Promise(resolve => setTimeout(resolve, SENSOR_READ_TIME_MS));
         
+        // Step 6: Turn on compressor again for 10 seconds
+        await sendESP32Command('compressor', true);
+        toast({ title: "Step 6/6", description: "Compressor ON - Final sampling (10s)" });
+        await new Promise(resolve => setTimeout(resolve, COMPRESSOR_TIME_MS));
+        await sendESP32Command('compressor', false);
+        toast({ title: "Step 6/6 Complete", description: "Compressor OFF" });
+        
         commandsSuccessful = true;
-        toast({ title: "Cycle Complete", description: "Device has saved its new reading.", duration: 4000 });
+        toast({ title: "Cycle Complete", description: "All steps executed successfully.", duration: 4000 });
       } catch (error) {
         console.error("Hardware or API Error during reading cycle:", error);
         toast({ title: "Hardware Warning", description: "Failed to communicate with ESP32. Resetting countdown.", variant: "destructive" });

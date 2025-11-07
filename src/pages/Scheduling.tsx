@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Calendar, Clock, Play, Square, Timer, Zap } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import SystemStatus from "@/components/SystemStatus";
+import SensorDataCards from "@/components/SensorDataCards";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -173,6 +174,8 @@ const Scheduling = () => {
         </header>
 
         <SystemStatus />
+
+        <SensorDataCards />
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Left panel */}

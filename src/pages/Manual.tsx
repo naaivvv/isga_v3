@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Fan, Gauge } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import SystemStatus from "@/components/SystemStatus";
+import SensorDataCards from "@/components/SensorDataCards";
 import {
   Card,
   CardContent,
@@ -98,6 +99,8 @@ const Manual = () => {
         </header>
 
         <SystemStatus />
+
+        <SensorDataCards />
 
         <Card className="mb-8">
           <CardContent className="pt-6">

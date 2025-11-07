@@ -3,7 +3,8 @@ import { Activity, Droplet, Wind } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import SystemStatus from "@/components/SystemStatus";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 interface CalibrationData {
   correction_slope: number;
@@ -11,10 +12,15 @@ interface CalibrationData {
   passed: number;
 }
 
+interface HistoricalData {
+  timestamp: string;
+  co: number;
+  co2: number;
+  o2: number;
+}
+
 const Index = () => {
-  const [coLevel, setCoLevel] = useState(0);
-  const [co2Level, setCo2Level] = useState(0);
-  const [o2Level, setO2Level] = useState(0);
+  const [historicalData, setHistoricalData] = useState<HistoricalData[]>([]);
   
   // Calibration correction factors
   const [coCalibration, setCoCalibration] = useState<CalibrationData>({ correction_slope: 1, correction_intercept: 0, passed: 0 });
@@ -56,36 +62,43 @@ const Index = () => {
     fetchCalibration();
   }, []);
 
-  // Fetch sensor data and apply calibration
+  // Fetch historical sensor data and apply calibration
   useEffect(() => {
-    const fetchSensorData = async () => {
+    const fetchHistoricalData = async () => {
       try {
-        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_sensor_data.php");
-        const data = await response.json();
+        const response = await fetch("http://192.168.1.10/chrono-state/php-backend/get_sensor_history.php");
+        const data: HistoricalData[] = await response.json();
 
-        // Get raw sensor values
-        const coRaw = Number(data.co) || 0;
-        const co2ppmRaw = Number(data.co2) || 0;
-        const o2Raw = Number(data.o2) || 0;
+        // Apply calibration to historical data
+        const calibratedData = data.map(item => {
+          const coRaw = Number(item.co) || 0;
+          const co2ppmRaw = Number(item.co2) || 0;
+          const o2Raw = Number(item.o2) || 0;
 
-        // Convert CO2 ppm → percent
-        const co2percentRaw = co2ppmRaw / 10000;
+          // Convert CO2 ppm → percent
+          const co2percentRaw = co2ppmRaw / 10000;
 
-        // Apply linear regression calibration: calibrated = raw * slope + intercept
-        const coCalibrated = coRaw * coCalibration.correction_slope + coCalibration.correction_intercept;
-        const co2Calibrated = co2percentRaw * co2Calibration.correction_slope + co2Calibration.correction_intercept;
-        const o2Calibrated = o2Raw * o2Calibration.correction_slope + o2Calibration.correction_intercept;
+          // Apply linear regression calibration
+          const coCalibrated = coRaw * coCalibration.correction_slope + coCalibration.correction_intercept;
+          const co2Calibrated = co2percentRaw * co2Calibration.correction_slope + co2Calibration.correction_intercept;
+          const o2Calibrated = o2Raw * o2Calibration.correction_slope + o2Calibration.correction_intercept;
 
-        setCoLevel(coCalibrated);
-        setCo2Level(co2Calibrated);
-        setO2Level(o2Calibrated);
+          return {
+            timestamp: item.timestamp,
+            co: coCalibrated,
+            co2: co2Calibrated,
+            o2: o2Calibrated,
+          };
+        });
+
+        setHistoricalData(calibratedData);
       } catch (error) {
-        console.error("Error fetching sensor data:", error);
+        console.error("Error fetching historical data:", error);
       }
     };
 
-    fetchSensorData();
-    const interval = setInterval(fetchSensorData, 2000);
+    fetchHistoricalData();
+    const interval = setInterval(fetchHistoricalData, 5000);
     return () => clearInterval(interval);
   }, [coCalibration, co2Calibration, o2Calibration]);
 
@@ -102,83 +115,139 @@ const Index = () => {
 
         <SystemStatus />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* CO Card */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* CO Chart */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-red-500" />
-                  Carbon Monoxide (CO)
-                </span>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-red-500" />
+                Carbon Monoxide (CO)
               </CardTitle>
-              <CardDescription>Current CO levels</CardDescription>
+              <CardDescription>Historical CO levels (ppm)</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">
-                    {coLevel.toFixed(1)}
-                  </span>
-                  <span className="text-muted-foreground">ppm</span>
-                </div>
-                <Progress value={coLevel} className="h-2" />
-                <p className="text-sm text-muted-foreground">Safe limit: 50 ppm</p>
-              </div>
+              <ChartContainer
+                config={{
+                  co: {
+                    label: "CO",
+                    color: "hsl(var(--chart-1))",
+                  },
+                }}
+                className="h-[200px] w-full"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={historicalData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                      dataKey="timestamp" 
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(value) => {
+                        const date = new Date(value);
+                        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      }}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="co" 
+                      stroke="hsl(var(--chart-1))" 
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartContainer>
             </CardContent>
           </Card>
 
-          {/* CO2 Card */}
+          {/* CO2 Chart */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Droplet className="w-5 h-5 text-orange-500" />
-                  Carbon Dioxide (CO₂)
-                </span>
+              <CardTitle className="flex items-center gap-2">
+                <Droplet className="w-5 h-5 text-orange-500" />
+                Carbon Dioxide (CO₂)
               </CardTitle>
-              <CardDescription>Current CO₂ levels</CardDescription>
+              <CardDescription>Historical CO₂ levels (%)</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-baseline gap-2">
-                  {/* ✅ Display CO2 in percent */}
-                  <span className="text-4xl font-bold text-foreground">
-                    {co2Level.toFixed(2)}
-                  </span>
-                  <span className="text-muted-foreground">%</span>
-                </div>
-
-                {/* ✅ Progress based on 5% max CO2 (adjust as needed) */}
-                <Progress value={(co2Level / 5) * 100} className="h-2" />
-
-                <p className="text-sm text-muted-foreground">Safe limit: ≤ 0.5%</p>
-              </div>
+              <ChartContainer
+                config={{
+                  co2: {
+                    label: "CO₂",
+                    color: "hsl(var(--chart-2))",
+                  },
+                }}
+                className="h-[200px] w-full"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={historicalData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                      dataKey="timestamp" 
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(value) => {
+                        const date = new Date(value);
+                        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      }}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="co2" 
+                      stroke="hsl(var(--chart-2))" 
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartContainer>
             </CardContent>
           </Card>
 
-          {/* O2 Card */}
+          {/* O2 Chart */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Wind className="w-5 h-5 text-primary" />
-                  Oxygen (O₂)
-                </span>
+              <CardTitle className="flex items-center gap-2">
+                <Wind className="w-5 h-5 text-primary" />
+                Oxygen (O₂)
               </CardTitle>
-              <CardDescription>Current O₂ levels</CardDescription>
+              <CardDescription>Historical O₂ levels (%)</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-bold text-foreground">
-                    {o2Level.toFixed(1)}
-                  </span>
-                  <span className="text-muted-foreground">%</span>
-                </div>
-                <Progress value={(o2Level / 21) * 100} className="h-2" />
-                <p className="text-sm text-muted-foreground">Normal: 19.5–23.5%</p>
-              </div>
+              <ChartContainer
+                config={{
+                  o2: {
+                    label: "O₂",
+                    color: "hsl(var(--chart-3))",
+                  },
+                }}
+                className="h-[200px] w-full"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={historicalData}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis 
+                      dataKey="timestamp" 
+                      tick={{ fontSize: 10 }}
+                      tickFormatter={(value) => {
+                        const date = new Date(value);
+                        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      }}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="o2" 
+                      stroke="hsl(var(--chart-3))" 
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartContainer>
             </CardContent>
           </Card>
         </div>
